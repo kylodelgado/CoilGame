@@ -144,6 +144,17 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
       </View>
 
       <Pressable
+        testID="account-link"
+        accessibilityRole="button"
+        accessibilityLabel="Account"
+        onPress={() => router.push('/account')}
+        style={styles.row}
+      >
+        <Text style={styles.rowLabel}>Account</Text>
+        <Text style={[styles.rowLabel, { color: skin.snakeBody }]}>›</Text>
+      </Pressable>
+
+      <Pressable
         testID="reset-button"
         accessibilityRole="button"
         onPress={() => setConfirmingReset(true)}

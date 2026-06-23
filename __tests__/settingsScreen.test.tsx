@@ -8,8 +8,9 @@ import type { StoragePort } from '../src/services/StoragePort';
 import { SKIN_IDS } from '../src/skins/registry';
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: mockBack }),
+  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: mockBack }),
 }));
 
 jest.mock('expo-constants', () => ({
@@ -113,6 +114,12 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
     renderSettings();
     fireEvent.press(screen.getByTestId('back-button'));
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('the Account row navigates to /account (Prompt 45)', () => {
+    renderSettings();
+    fireEvent.press(screen.getByTestId('account-link'));
+    expect(mockPush).toHaveBeenCalledWith('/account');
   });
 
   describe('Skin picker (Prompt 33)', () => {

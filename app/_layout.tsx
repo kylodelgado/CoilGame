@@ -16,6 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="game" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="account" />
         <Stack.Screen name="win" options={{ presentation: 'modal' }} />
         <Stack.Screen name="loss" options={{ presentation: 'modal' }} />
       </Stack>

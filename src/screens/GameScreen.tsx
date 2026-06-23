@@ -19,7 +19,7 @@ import type {
   PresetId,
   WallBehavior,
 } from '../engine/types';
-import { classicMode } from '../modes/classicMode';
+import { MODES } from '../modes';
 import type { Mode } from '../modes/Mode';
 import {
   createGameController,
@@ -49,6 +49,7 @@ interface Projection {
   snake: Cell[];
   food: Cell | null;
   bonusFood: Cell | null;
+  obstacles: Cell[];
   score: number;
 }
 
@@ -57,6 +58,7 @@ const toProjection = (s: GameState): Projection => ({
   snake: s.snake,
   food: s.food,
   bonusFood: s.bonusFood,
+  obstacles: s.obstacles,
   score: s.score,
 });
 
@@ -110,7 +112,8 @@ export function GameScreen(props: GameScreenProps = {}) {
       ? params.modeId
       : storeMode;
 
-  const mode = props.mode ?? classicMode;
+  // Route through the selected mode (props.mode wins for tests/DI).
+  const mode = props.mode ?? MODES[modeId];
   const rng = useMemo(() => props.rng ?? createMathRandom(), [props.rng]);
   const haptics = useMemo(() => props.haptics ?? createExpoHaptics(), [props.haptics]);
   const sound = useMemo(() => props.sound ?? createSilentSound(), [props.sound]);
@@ -134,6 +137,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     snake: [],
     food: null,
     bonusFood: null,
+    obstacles: [],
     score: 0,
   }));
 
@@ -163,19 +167,18 @@ export function GameScreen(props: GameScreenProps = {}) {
       createGameController({
         mode,
         config,
+        modeId,
         rng,
         haptics,
         sound,
         isHapticsEnabled: () => useSettingsStore.getState().hapticsEnabled,
         isSoundEnabled: () => useSettingsStore.getState().soundEnabled,
-        // modeId is threaded into the controller properly in step 41; for now
-        // the screen records under the selected mode.
-        recordRun: (w, score) =>
-          useScoresStore.getState().recordRun(modeId, w, score),
+        recordRun: (m, w, score) =>
+          useScoresStore.getState().recordRun(m, w, score),
         onState: (state) => setProjection(toProjection(state)),
         onTerminal,
       }),
-    [mode, config, rng, haptics, sound, onTerminal, modeId],
+    [mode, config, modeId, rng, haptics, sound, onTerminal],
   );
 
   // Seed the projection from the freshly created controller's initial state.
@@ -218,7 +221,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     [controller],
   );
 
-  const { status, snake, food, bonusFood, score } = projection;
+  const { status, snake, food, bonusFood, obstacles, score } = projection;
 
   return (
     <View
@@ -249,6 +252,7 @@ export function GameScreen(props: GameScreenProps = {}) {
           snake={snake}
           food={food}
           bonusFood={bonusFood}
+          obstacles={obstacles}
         />
         {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
 

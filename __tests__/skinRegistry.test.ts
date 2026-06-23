@@ -54,6 +54,12 @@ describe('skin registry', () => {
     }
   });
 
+  it('every skin defines obstacleColor (Prompt 41)', () => {
+    for (const id of SKIN_IDS) {
+      expect(typeof SKINS[id].obstacleColor).toBe('string');
+    }
+  });
+
   it('every color token is a documented hex string', () => {
     const hex = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
     for (const id of SKIN_IDS) {
@@ -64,6 +70,7 @@ describe('skin registry', () => {
       expect(s.snakeBody).toMatch(hex);
       expect(s.foodColor).toMatch(hex);
       expect(s.bonusColor).toMatch(hex);
+      expect(s.obstacleColor).toMatch(hex);
     }
   });
 

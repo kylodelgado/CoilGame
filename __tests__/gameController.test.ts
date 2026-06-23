@@ -42,6 +42,7 @@ function makeState(over: Partial<GameState> & { snake: Cell[] }): GameState {
 
 function makeMocks() {
   return {
+    modeId: 'CLASSIC' as const,
     haptics: { eat: jest.fn(), death: jest.fn() },
     sound: { play: jest.fn(), preload: jest.fn(() => Promise.resolve()) },
     recordRun: jest.fn(() => ({ isNewBest: false })),
@@ -263,7 +264,7 @@ describe('createGameController (runtime glue)', () => {
     expect(m.haptics.death).toHaveBeenCalledTimes(1);
     expect(m.sound.play).toHaveBeenCalledWith('DIED');
     expect(m.recordRun).toHaveBeenCalledTimes(1);
-    expect(m.recordRun).toHaveBeenCalledWith('SOLID', 70);
+    expect(m.recordRun).toHaveBeenCalledWith('CLASSIC', 'SOLID', 70);
     expect(m.onTerminal).toHaveBeenCalledTimes(1);
     expect(m.onTerminal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -297,10 +298,33 @@ describe('createGameController (runtime glue)', () => {
 
     expect(m.sound.play).toHaveBeenCalledWith('WON');
     expect(m.recordRun).toHaveBeenCalledTimes(1);
-    expect(m.recordRun).toHaveBeenCalledWith('PORTAL', 360);
+    expect(m.recordRun).toHaveBeenCalledWith('CLASSIC', 'PORTAL', 360);
     expect(m.onTerminal).toHaveBeenCalledWith(
       expect.objectContaining({ state: controller.getState(), isNewBest: true }),
     );
+  });
+
+  it('records the run under the active modeId on terminal (Prompt 41)', () => {
+    const initial = makeState({ snake: [{ x: 2, y: 2 }] });
+    const lostResult: TickResult = {
+      state: { ...initial, status: 'LOST', score: 30 },
+      events: ['DIED'],
+    };
+    const m = makeMocks();
+    const controller = createGameController({
+      mode: scriptedMode(initial, [lostResult]),
+      config: realConfig('PORTAL'),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      ...m,
+      modeId: 'DYNAMIC_WALLS', // override the default CLASSIC
+    });
+    controller.tapToStart();
+    controller.setRunning();
+    controller.step();
+
+    expect(m.recordRun).toHaveBeenCalledWith('DYNAMIC_WALLS', 'PORTAL', 30);
   });
 
   it('terminal payload carries foodEaten, length, and elapsedMs excluding paused time (Prompt 37)', () => {

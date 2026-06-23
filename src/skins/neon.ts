@@ -18,4 +18,5 @@ export const neon: Skin = {
   foodShape: 'circle',
   bonusColor: '#FFE600', // electric yellow, contrasts the magenta food
   bonusShape: 'square',
+  obstacleColor: '#6A4BA6', // muted purple wall on the near-black field
 };

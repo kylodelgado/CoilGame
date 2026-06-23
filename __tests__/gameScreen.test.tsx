@@ -5,6 +5,7 @@ import { SkinProvider } from '../src/skins/SkinProvider';
 import { useScoresStore } from '../src/state/useScoresStore';
 import { useSettingsStore } from '../src/state/useSettingsStore';
 import { DEFAULT_SETTINGS } from '../src/services/StoragePort';
+import { createSeededRandom } from '../src/services/RandomPort';
 import type { Mode } from '../src/modes/Mode';
 import type { Cell, GameConfig, GameState, TickResult } from '../src/engine/types';
 
@@ -242,6 +243,36 @@ describe('GameScreen integration', () => {
       startRunning();
 
       expect(screen.queryByTestId('dpad-up')).toBeNull();
+    });
+  });
+
+  describe('Dynamic Walls routing (Prompt 41)', () => {
+    it('routes through dynamicWallsMode and records the run under the DYNAMIC_WALLS key', () => {
+      useSettingsStore.setState({ modeId: 'DYNAMIC_WALLS' });
+      const recordSpy = jest.spyOn(useScoresStore.getState(), 'recordRun');
+
+      // No `mode` prop: the screen selects the real mode from MODES[modeId].
+      render(
+        <SkinProvider>
+          <GameScreen rng={createSeededRandom(1)} />
+        </SkinProvider>,
+      );
+      startRunning();
+      // The snake runs straight into the solid wall and dies (terminal).
+      advance(10000);
+
+      expect(mockReplace).toHaveBeenCalled();
+      const nav = mockReplace.mock.calls[0][0];
+      expect(nav.pathname).toBe('/loss');
+      expect(nav.params.modeId).toBe('DYNAMIC_WALLS');
+      // Scoring is keyed by the active mode.
+      expect(recordSpy).toHaveBeenCalledWith(
+        'DYNAMIC_WALLS',
+        'SOLID',
+        expect.any(Number),
+      );
+
+      recordSpy.mockRestore();
     });
   });
 });

@@ -19,4 +19,5 @@ export const monoLcd: Skin = {
   foodShape: 'circle',
   bonusColor: '#306230', // mid green ring, distinct from the darkest-ink food
   bonusShape: 'square',
+  obstacleColor: '#5A7A3A', // muted olive wall against the pale LCD green
 };

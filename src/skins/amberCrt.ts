@@ -18,4 +18,5 @@ export const amberCrt: Skin = {
   foodShape: 'square',
   bonusColor: '#FFF3C4', // pale amber-white, brighter than the food
   bonusShape: 'circle',
+  obstacleColor: '#5C3A00', // dim brown-amber wall
 };

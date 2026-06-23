@@ -20,4 +20,6 @@ export interface Skin {
   /** Bonus pickup color — distinct from foodColor so it reads as special. */
   bonusColor: string;
   bonusShape: 'square' | 'circle';
+  /** Dynamic-walls obstacle color — reads as a hazard, distinct from the snake. */
+  obstacleColor: string;
 }

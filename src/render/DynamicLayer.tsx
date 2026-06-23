@@ -10,6 +10,8 @@ interface DynamicLayerProps {
   food: Cell | null;
   /** Active bonus pickup, or null/undefined when none is on the board. */
   bonusFood?: Cell | null;
+  /** Dynamic-walls obstacle cells; empty/undefined for modes without them. */
+  obstacles?: Cell[];
 }
 
 /**
@@ -25,6 +27,7 @@ export function DynamicLayer({
   snake,
   food,
   bonusFood = null,
+  obstacles = [],
 }: DynamicLayerProps) {
   const skin = useSkin();
   const corner = skin.cellShape === 'rounded' ? gridSpec.cellSize / 4 : 0;
@@ -75,6 +78,14 @@ export function DynamicLayer({
 
   return (
     <Canvas style={StyleSheet.absoluteFill}>
+      {/* Obstacles sit beneath the actors as static hazards. */}
+      {obstacles.map((cell, i) =>
+        cellNode(
+          cellRect(gridSpec, cell, skin.cellGap),
+          skin.obstacleColor,
+          `o${i}`,
+        ),
+      )}
       {snake.map((cell, i) =>
         cellNode(
           cellRect(gridSpec, cell, skin.cellGap),

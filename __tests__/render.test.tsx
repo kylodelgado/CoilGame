@@ -96,6 +96,28 @@ describe('Skia rendering (EH-12/13)', () => {
     ).not.toThrow();
   });
 
+  it('DynamicLayer renders obstacles, and empty obstacles render unchanged (Prompt 41)', () => {
+    expect(() =>
+      wrap(
+        <DynamicLayer
+          gridSpec={GRID}
+          snake={makeSnake(3)}
+          food={{ x: 8, y: 8 }}
+          obstacles={[
+            { x: 1, y: 1 },
+            { x: 2, y: 2 },
+          ]}
+        />,
+      ),
+    ).not.toThrow();
+    // Empty/omitted obstacles render exactly like the classic path.
+    expect(() =>
+      wrap(
+        <DynamicLayer gridSpec={GRID} snake={makeSnake(3)} food={null} obstacles={[]} />,
+      ),
+    ).not.toThrow();
+  });
+
   it.each([1, 3, 10, 50])(
     'DynamicLayer renders a snake of length %i without throwing',
     (length) => {

@@ -177,6 +177,7 @@ describe('acceptance: haptics gating + silent sound, end to end', () => {
     return createGameController({
       mode: mode(),
       config,
+      modeId: 'CLASSIC',
       rng: createSeededRandom(1),
       haptics: haptics as never,
       sound: { ...sound, preload: jest.fn(() => Promise.resolve()) } as never,

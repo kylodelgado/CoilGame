@@ -3,6 +3,7 @@ import type {
   Direction,
   GameConfig,
   GameState,
+  ModeId,
   WallBehavior,
 } from '../engine/types';
 import type { Mode } from '../modes/Mode';
@@ -27,6 +28,8 @@ export interface TerminalPayload {
 export interface GameControllerDeps {
   mode: Mode;
   config: GameConfig;
+  /** The active mode's id; scores are recorded under this mode×wall board. */
+  modeId: ModeId;
   rng: RandomPort;
   haptics: HapticsPort;
   sound: SoundPort;
@@ -40,7 +43,11 @@ export interface GameControllerDeps {
    */
   clock?: () => number;
   /** Scores store entry point; called on a completed run only. */
-  recordRun: (wall: WallBehavior, score: number) => { isNewBest: boolean };
+  recordRun: (
+    modeId: ModeId,
+    wall: WallBehavior,
+    score: number,
+  ) => { isNewBest: boolean };
   /** Notify the renderer/UI of a new authoritative state. */
   onState: (state: GameState) => void;
   /** WON or LOST reached this step. */
@@ -70,6 +77,7 @@ export function createGameController(deps: GameControllerDeps): GameController {
   const {
     mode,
     config,
+    modeId,
     rng,
     haptics,
     sound,
@@ -173,7 +181,7 @@ export function createGameController(deps: GameControllerDeps): GameController {
 
       if (state.status === 'WON' || state.status === 'LOST') {
         closeRunSegment();
-        const { isNewBest } = recordRun(config.wallBehavior, state.score);
+        const { isNewBest } = recordRun(modeId, config.wallBehavior, state.score);
         onTerminal({
           state,
           score: state.score,

@@ -19,4 +19,5 @@ export const greenOnBlack: Skin = {
   foodShape: 'square',
   bonusColor: '#FFD300', // bright golden yellow, pops against the green palette
   bonusShape: 'circle',
+  obstacleColor: '#555555', // neutral grey wall, clearly not snake or food
 };

@@ -41,6 +41,7 @@ describe('useSettingsStore', () => {
       soundEnabled: false,
       hapticsEnabled: false,
       skinId: 'amberCrt',
+      controlScheme: 'DPAD',
     };
     const storage = makeMockStorage(persisted);
 
@@ -151,5 +152,19 @@ describe('useSettingsStore', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(useSettingsStore.getState().skinId).toBe('monoLcd');
+  });
+
+  it('setControlScheme updates state and persists the full settings', async () => {
+    const storage = makeMockStorage();
+    await useSettingsStore.getState().hydrate(storage);
+    storage.setSettings.mockClear();
+
+    useSettingsStore.getState().setControlScheme('DPAD');
+
+    expect(useSettingsStore.getState().controlScheme).toBe('DPAD');
+    expect(storage.setSettings).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      controlScheme: 'DPAD',
+    });
   });
 });

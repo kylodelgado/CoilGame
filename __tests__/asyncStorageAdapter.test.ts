@@ -53,6 +53,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
       soundEnabled: false,
       hapticsEnabled: true,
       skinId: 'amberCrt',
+      controlScheme: 'DPAD',
     };
     await adapter.setSettings(settings);
     await expect(adapter.getSettings()).resolves.toEqual(settings);
@@ -109,6 +110,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
       soundEnabled: DEFAULT_SETTINGS.soundEnabled,
       hapticsEnabled: false,
       skinId: DEFAULT_SETTINGS.skinId,
+      controlScheme: DEFAULT_SETTINGS.controlScheme,
     });
     await expect(adapter.getScores()).resolves.toEqual({
       bestSolid: 0,

@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import type { PersistedSettings, PresetId, WallBehavior } from '../engine/types';
+import type {
+  ControlScheme,
+  PersistedSettings,
+  PresetId,
+  WallBehavior,
+} from '../engine/types';
 import type { SkinId } from '../skins/registry';
 import { DEFAULT_SETTINGS, type StoragePort } from '../services/StoragePort';
 
@@ -9,6 +14,7 @@ interface SettingsState {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   skinId: SkinId;
+  controlScheme: ControlScheme;
   hydrated: boolean;
 
   hydrate(storage: StoragePort): Promise<void>;
@@ -17,6 +23,7 @@ interface SettingsState {
   setSound(on: boolean): void;
   setHaptics(on: boolean): void;
   setSkin(id: SkinId): void;
+  setControlScheme(s: ControlScheme): void;
 }
 
 /** The StoragePort injected at hydrate time; setters persist through it. */
@@ -30,6 +37,7 @@ function toPersisted(state: SettingsState): PersistedSettings {
     soundEnabled: state.soundEnabled,
     hapticsEnabled: state.hapticsEnabled,
     skinId: state.skinId,
+    controlScheme: state.controlScheme,
   };
 }
 
@@ -77,6 +85,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     setSkin(id: SkinId): void {
       set({ skinId: id });
+      persist();
+    },
+
+    setControlScheme(s: ControlScheme): void {
+      set({ controlScheme: s });
       persist();
     },
   };

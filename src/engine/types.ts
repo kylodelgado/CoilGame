@@ -85,12 +85,15 @@ export interface GameState {
   ticksUntilBonus: number;
 }
 
+export type ControlScheme = 'SWIPE' | 'DPAD';
+
 export interface PersistedSettings {
   presetId: PresetId;
   wallBehavior: WallBehavior;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   skinId: SkinId;
+  controlScheme: ControlScheme;
 }
 
 export interface PersistedScores {

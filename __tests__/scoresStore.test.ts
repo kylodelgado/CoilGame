@@ -14,6 +14,7 @@ function makeMockStorage(
         soundEnabled: true,
         hapticsEnabled: true,
         skinId: 'greenOnBlack' as const,
+        controlScheme: 'SWIPE' as const,
       }),
     ),
     setSettings: jest.fn((_s) => Promise.resolve()),

@@ -10,6 +10,12 @@ import { useSkin, SkinProvider } from '../skins/SkinProvider';
 import { SKIN_IDS, getSkin } from '../skins/registry';
 import { PRESETS } from '../engine/presets';
 import { PresetPreview } from '../render/PresetPreview';
+import type { ControlScheme } from '../engine/types';
+
+const CONTROL_OPTIONS: ReadonlyArray<readonly [ControlScheme, string]> = [
+  ['SWIPE', 'Swipe'],
+  ['DPAD', 'D-pad'],
+];
 
 interface SettingsScreenProps {
   /** Inject a StoragePort (tests); defaults to the AsyncStorage adapter. */
@@ -32,9 +38,11 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const skinId = useSettingsStore((s) => s.skinId);
+  const controlScheme = useSettingsStore((s) => s.controlScheme);
   const setSound = useSettingsStore((s) => s.setSound);
   const setHaptics = useSettingsStore((s) => s.setHaptics);
   const setSkin = useSettingsStore((s) => s.setSkin);
+  const setControlScheme = useSettingsStore((s) => s.setControlScheme);
   const resetScores = useScoresStore((s) => s.reset);
 
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -72,6 +80,37 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
           value={hapticsEnabled}
           onValueChange={(v) => setHaptics(v)}
         />
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Controls</Text>
+        <View style={styles.segment}>
+          {CONTROL_OPTIONS.map(([value, label]) => {
+            const selected = value === controlScheme;
+            return (
+              <Pressable
+                key={value}
+                testID={`control-scheme-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setControlScheme(value)}
+                style={[
+                  styles.segmentButton,
+                  selected && { borderColor: skin.snakeHead },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentLabel,
+                    selected && { color: skin.snakeHead },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <View style={styles.skinSection}>
@@ -169,6 +208,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#222',
   },
   rowLabel: { color: '#eee', fontSize: 18 },
+  segment: { flexDirection: 'row', gap: 8 },
+  segmentButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  segmentLabel: { color: '#aaa', fontSize: 15, fontWeight: '600' },
   skinSection: { paddingVertical: 16, gap: 12 },
   skinGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   skinOption: { borderRadius: 8 },

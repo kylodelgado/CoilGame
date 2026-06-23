@@ -1,4 +1,5 @@
 import type {
+  ControlScheme,
   PersistedScores,
   PersistedSettings,
   PresetId,
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   soundEnabled: true,
   hapticsEnabled: true,
   skinId: 'greenOnBlack',
+  controlScheme: 'SWIPE',
 };
 
 export const DEFAULT_SCORES: PersistedScores = {
@@ -38,6 +40,7 @@ export const SCORES_KEY = 'coil.scores.v1';
 
 const PRESET_IDS: readonly PresetId[] = ['CLASSIC', 'STANDARD', 'DENSE'];
 const WALL_BEHAVIORS: readonly WallBehavior[] = ['SOLID', 'PORTAL'];
+const CONTROL_SCHEMES: readonly ControlScheme[] = ['SWIPE', 'DPAD'];
 
 /** Narrow to a plain (non-null, non-array) object for safe property access. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +57,10 @@ function isWallBehavior(value: unknown): value is WallBehavior {
 
 function isSkinId(value: unknown): value is SkinId {
   return SKIN_IDS.includes(value as SkinId);
+}
+
+function isControlScheme(value: unknown): value is ControlScheme {
+  return CONTROL_SCHEMES.includes(value as ControlScheme);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -85,6 +92,9 @@ export function validateSettings(raw: unknown): PersistedSettings {
         ? raw.hapticsEnabled
         : DEFAULT_SETTINGS.hapticsEnabled,
     skinId: isSkinId(raw.skinId) ? raw.skinId : DEFAULT_SETTINGS.skinId,
+    controlScheme: isControlScheme(raw.controlScheme)
+      ? raw.controlScheme
+      : DEFAULT_SETTINGS.controlScheme,
   };
 }
 

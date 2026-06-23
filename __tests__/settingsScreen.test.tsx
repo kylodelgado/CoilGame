@@ -145,4 +145,29 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
       ).toEqual(expect.objectContaining({ selected: false }));
     });
   });
+
+  describe('Controls toggle (Prompt 36)', () => {
+    it('defaults to Swipe selected', () => {
+      renderSettings();
+      expect(
+        screen.getByTestId('control-scheme-SWIPE').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: true }));
+      expect(
+        screen.getByTestId('control-scheme-DPAD').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: false }));
+    });
+
+    it('selecting D-pad updates the store and persists', () => {
+      renderSettings();
+      fireEvent.press(screen.getByTestId('control-scheme-DPAD'));
+
+      expect(useSettingsStore.getState().controlScheme).toBe('DPAD');
+      expect(storage.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ controlScheme: 'DPAD' }),
+      );
+      expect(
+        screen.getByTestId('control-scheme-DPAD').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: true }));
+    });
+  });
 });

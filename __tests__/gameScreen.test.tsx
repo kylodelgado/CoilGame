@@ -213,4 +213,34 @@ describe('GameScreen integration', () => {
       expect.objectContaining({ pathname: '/win' }),
     );
   });
+
+  describe('control scheme (Prompt 36)', () => {
+    it('with controlScheme DPAD, a D-pad press enqueues a Direction into the engine', () => {
+      useSettingsStore.setState({ controlScheme: 'DPAD' });
+      const mode = scriptedMode([
+        { state: baseState({ status: 'RUNNING', snake: SNAKE }), events: [] },
+      ]);
+      renderGame(mode);
+      startRunning();
+
+      // The D-pad lives in the chrome below the board.
+      fireEvent.press(screen.getByTestId('dpad-up'));
+      advance(100); // one tick consumes the queued direction
+
+      expect(mode.tick).toHaveBeenCalled();
+      // The controller enqueued 'UP' before the tick that just ran.
+      expect(mode.tick.mock.calls[0][0].inputQueue).toContain('UP');
+    });
+
+    it('with controlScheme SWIPE, the D-pad is not rendered (swipe path used)', () => {
+      useSettingsStore.setState({ controlScheme: 'SWIPE' });
+      const mode = scriptedMode([
+        { state: baseState({ status: 'RUNNING', snake: SNAKE }), events: [] },
+      ]);
+      renderGame(mode);
+      startRunning();
+
+      expect(screen.queryByTestId('dpad-up')).toBeNull();
+    });
+  });
 });

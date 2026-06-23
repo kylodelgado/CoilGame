@@ -14,6 +14,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       soundEnabled: false,
       hapticsEnabled: true,
       skinId: 'neon',
+      controlScheme: 'DPAD',
     };
     expect(validateSettings(good)).toEqual(good);
   });
@@ -39,6 +40,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       soundEnabled: DEFAULT_SETTINGS.soundEnabled,
       hapticsEnabled: DEFAULT_SETTINGS.hapticsEnabled,
       skinId: DEFAULT_SETTINGS.skinId,
+      controlScheme: DEFAULT_SETTINGS.controlScheme,
     });
   });
 
@@ -55,6 +57,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       soundEnabled: true,
       hapticsEnabled: false,
       skinId: DEFAULT_SETTINGS.skinId,
+      controlScheme: DEFAULT_SETTINGS.controlScheme,
     });
   });
 
@@ -105,6 +108,34 @@ describe('validateSettings (EH-1, §8.5)', () => {
     it('passes a valid skinId through', () => {
       const result = validateSettings({ ...DEFAULT_SETTINGS, skinId: 'neon' });
       expect(result.skinId).toBe('neon');
+    });
+  });
+
+  describe('controlScheme (Prompt 36, additive field)', () => {
+    it('defaults to SWIPE when the blob has none', () => {
+      const legacy = {
+        presetId: 'CLASSIC',
+        wallBehavior: 'SOLID',
+        soundEnabled: true,
+        hapticsEnabled: true,
+      };
+      expect(validateSettings(legacy).controlScheme).toBe('SWIPE');
+    });
+
+    it('falls back to SWIPE for an unknown controlScheme', () => {
+      const result = validateSettings({
+        ...DEFAULT_SETTINGS,
+        controlScheme: 'JOYSTICK',
+      });
+      expect(result.controlScheme).toBe('SWIPE');
+    });
+
+    it('passes a valid controlScheme through', () => {
+      const result = validateSettings({
+        ...DEFAULT_SETTINGS,
+        controlScheme: 'DPAD',
+      });
+      expect(result.controlScheme).toBe('DPAD');
     });
   });
 });

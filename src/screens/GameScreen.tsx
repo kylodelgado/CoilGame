@@ -27,6 +27,7 @@ import { useCountdown } from '../runtime/useCountdown';
 import { Board } from '../render/Board';
 import { DynamicLayer } from '../render/DynamicLayer';
 import { SwipeInput } from '../input/SwipeInput';
+import { DpadInput } from '../input/DpadInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
 import { createExpoHaptics, type HapticsPort } from '../services/HapticsPort';
 import { createSilentSound, type SoundPort } from '../services/SoundPort';
@@ -83,6 +84,7 @@ export function GameScreen(props: GameScreenProps = {}) {
 
   const storePreset = useSettingsStore((s) => s.presetId);
   const storeWall = useSettingsStore((s) => s.wallBehavior);
+  const controlScheme = useSettingsStore((s) => s.controlScheme);
 
   // Prefer route params, fall back to the settings store.
   const presetId: PresetId =
@@ -227,7 +229,7 @@ export function GameScreen(props: GameScreenProps = {}) {
           food={food}
           bonusFood={bonusFood}
         />
-        <SwipeInput onDirection={onSwipe} />
+        {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
 
         {status === 'TAP_TO_START' && (
           <Pressable
@@ -259,12 +261,22 @@ export function GameScreen(props: GameScreenProps = {}) {
           />
         )}
       </View>
+
+      {/* D-pad lives in the chrome below the board, never over the grid. */}
+      {controlScheme === 'DPAD' && (
+        <View
+          style={[styles.dpadChrome, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <DpadInput onDirection={onSwipe} />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  dpadChrome: { alignItems: 'center', paddingTop: 8 },
   hud: {
     flexDirection: 'row',
     alignItems: 'center',

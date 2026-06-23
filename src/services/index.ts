@@ -5,3 +5,6 @@ export * from './HapticsPort';
 export * from './SoundPort';
 export * from './AuthPort';
 export * from './LeaderboardPort';
+export * from './firebaseAuth';
+export * from './firebaseLeaderboard';
+export * from './firebaseConfig';

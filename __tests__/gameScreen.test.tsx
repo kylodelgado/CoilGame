@@ -199,6 +199,25 @@ describe('GameScreen integration', () => {
     expect(arg.params.isNewBest).toBe('1'); // 50 > best 0
   });
 
+  it('submits the score to the leaderboard on terminal without blocking navigation (Prompt 44)', () => {
+    const submit = jest.fn();
+    const mode = scriptedMode([
+      { state: baseState({ status: 'LOST', score: 50 }), events: ['DIED'] },
+    ]);
+    render(
+      <SkinProvider>
+        <GameScreen mode={mode} submitter={{ submit }} />
+      </SkinProvider>,
+    );
+    startRunning();
+    advance(100);
+
+    // Navigation (local flow) happened...
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    // ...and the fire-and-forget submission was dispatched for this board.
+    expect(submit).toHaveBeenCalledWith({ modeId: 'CLASSIC', wall: 'SOLID' }, 50);
+  });
+
   it('navigates to /win on a terminal WON', () => {
     const mode = scriptedMode([
       {

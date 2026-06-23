@@ -35,6 +35,12 @@ import { DpadInput } from '../input/DpadInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
 import { createExpoHaptics, type HapticsPort } from '../services/HapticsPort';
 import { createSilentSound, type SoundPort } from '../services/SoundPort';
+import {
+  createScoreSubmitter,
+  type ScoreSubmitter,
+} from '../services/submitScoreOnTerminal';
+import { createInMemoryAuth } from '../services/AuthPort';
+import { createInMemoryLeaderboard } from '../services/LeaderboardPort';
 import { useSettingsStore } from '../state/useSettingsStore';
 import { useScoresStore } from '../state/useScoresStore';
 import { useSkin } from '../skins/SkinProvider';
@@ -68,6 +74,8 @@ export interface GameScreenProps {
   rng?: RandomPort;
   haptics?: HapticsPort;
   sound?: SoundPort;
+  /** Offline-safe leaderboard submitter; defaults to a local-only no-op. */
+  submitter?: ScoreSubmitter;
 }
 
 /**
@@ -117,6 +125,17 @@ export function GameScreen(props: GameScreenProps = {}) {
   const rng = useMemo(() => props.rng ?? createMathRandom(), [props.rng]);
   const haptics = useMemo(() => props.haptics ?? createExpoHaptics(), [props.haptics]);
   const sound = useMemo(() => props.sound ?? createSilentSound(), [props.sound]);
+  // Local-only by default (in-memory auth has no user => submit no-ops). The
+  // real Firebase-backed submitter is injected once auth is wired (step 45+).
+  const submitter = useMemo(
+    () =>
+      props.submitter ??
+      createScoreSubmitter({
+        auth: createInMemoryAuth(),
+        leaderboard: createInMemoryLeaderboard(),
+      }),
+    [props.submitter],
+  );
 
   // Grid recomputes on dimension/safe-area/preset change (foldables, EH).
   const grid = useMemo(() => {
@@ -157,8 +176,12 @@ export function GameScreen(props: GameScreenProps = {}) {
           modeId,
         },
       });
+
+      // Fire-and-forget leaderboard submission AFTER local recordRun (done in
+      // the controller) and the terminal navigation; never gates the UI path.
+      submitter.submit({ modeId, wall }, score);
     },
-    [presetId, wall, modeId],
+    [presetId, wall, modeId, submitter],
   );
 
   // The controller owns authoritative state; recreate only when config changes.

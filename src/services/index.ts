@@ -8,3 +8,4 @@ export * from './LeaderboardPort';
 export * from './firebaseAuth';
 export * from './firebaseLeaderboard';
 export * from './firebaseConfig';
+export * from './submitScoreOnTerminal';

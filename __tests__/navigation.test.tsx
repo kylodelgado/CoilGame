@@ -24,6 +24,7 @@ function makeMockStorage(): jest.Mocked<StoragePort> {
         wallBehavior: 'SOLID' as const,
         soundEnabled: true,
         hapticsEnabled: true,
+        skinId: 'greenOnBlack' as const,
       }),
     ),
     setSettings: jest.fn((_s) => Promise.resolve()),

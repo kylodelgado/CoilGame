@@ -1,6 +1,8 @@
 // Core domain vocabulary for Coil. Types only — no runtime code in this file.
 // Imported by every later layer, so the names and shapes are fixed.
 
+import type { SkinId } from '../skins/registry';
+
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 
 export type WallBehavior = 'SOLID' | 'PORTAL';
@@ -66,6 +68,7 @@ export interface PersistedSettings {
   wallBehavior: WallBehavior;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
+  skinId: SkinId;
 }
 
 export interface PersistedScores {

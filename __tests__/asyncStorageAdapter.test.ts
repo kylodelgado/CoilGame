@@ -52,6 +52,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
       wallBehavior: 'PORTAL',
       soundEnabled: false,
       hapticsEnabled: true,
+      skinId: 'amberCrt',
     };
     await adapter.setSettings(settings);
     await expect(adapter.getSettings()).resolves.toEqual(settings);
@@ -107,6 +108,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
       wallBehavior: 'PORTAL',
       soundEnabled: DEFAULT_SETTINGS.soundEnabled,
       hapticsEnabled: false,
+      skinId: DEFAULT_SETTINGS.skinId,
     });
     await expect(adapter.getScores()).resolves.toEqual({
       bestSolid: 0,

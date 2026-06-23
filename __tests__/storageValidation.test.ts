@@ -13,6 +13,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       wallBehavior: 'PORTAL',
       soundEnabled: false,
       hapticsEnabled: true,
+      skinId: 'neon',
     };
     expect(validateSettings(good)).toEqual(good);
   });
@@ -37,6 +38,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       wallBehavior: 'PORTAL',
       soundEnabled: DEFAULT_SETTINGS.soundEnabled,
       hapticsEnabled: DEFAULT_SETTINGS.hapticsEnabled,
+      skinId: DEFAULT_SETTINGS.skinId,
     });
   });
 
@@ -52,6 +54,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       wallBehavior: DEFAULT_SETTINGS.wallBehavior,
       soundEnabled: true,
       hapticsEnabled: false,
+      skinId: DEFAULT_SETTINGS.skinId,
     });
   });
 
@@ -77,6 +80,32 @@ describe('validateSettings (EH-1, §8.5)', () => {
     for (const input of inputs) {
       expect(() => validateSettings(input)).not.toThrow();
     }
+  });
+
+  describe('skinId (Prompt 32, additive field)', () => {
+    it('defaults skinId when the blob has none (backward compatible)', () => {
+      // An old coil.settings.v1 blob from before skins were persisted.
+      const legacy = {
+        presetId: 'CLASSIC',
+        wallBehavior: 'SOLID',
+        soundEnabled: true,
+        hapticsEnabled: true,
+      };
+      expect(validateSettings(legacy).skinId).toBe(DEFAULT_SETTINGS.skinId);
+    });
+
+    it('falls back to the default for an unknown skinId', () => {
+      const result = validateSettings({
+        ...DEFAULT_SETTINGS,
+        skinId: 'rainbow',
+      });
+      expect(result.skinId).toBe(DEFAULT_SETTINGS.skinId);
+    });
+
+    it('passes a valid skinId through', () => {
+      const result = validateSettings({ ...DEFAULT_SETTINGS, skinId: 'neon' });
+      expect(result.skinId).toBe('neon');
+    });
   });
 });
 

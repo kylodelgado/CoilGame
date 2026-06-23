@@ -40,6 +40,7 @@ describe('useSettingsStore', () => {
       wallBehavior: 'PORTAL',
       soundEnabled: false,
       hapticsEnabled: false,
+      skinId: 'amberCrt',
     };
     const storage = makeMockStorage(persisted);
 
@@ -51,6 +52,7 @@ describe('useSettingsStore', () => {
     expect(state.wallBehavior).toBe('PORTAL');
     expect(state.soundEnabled).toBe(false);
     expect(state.hapticsEnabled).toBe(false);
+    expect(state.skinId).toBe('amberCrt');
     expect(state.hydrated).toBe(true);
   });
 
@@ -110,6 +112,20 @@ describe('useSettingsStore', () => {
     });
   });
 
+  it('setSkin updates state and persists the full settings', async () => {
+    const storage = makeMockStorage();
+    await useSettingsStore.getState().hydrate(storage);
+    storage.setSettings.mockClear();
+
+    useSettingsStore.getState().setSkin('neon');
+
+    expect(useSettingsStore.getState().skinId).toBe('neon');
+    expect(storage.setSettings).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      skinId: 'neon',
+    });
+  });
+
   it('keeps the in-memory value when setSettings rejects (EH-2)', async () => {
     const storage = makeMockStorage();
     await useSettingsStore.getState().hydrate(storage);
@@ -122,5 +138,18 @@ describe('useSettingsStore', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(useSettingsStore.getState().presetId).toBe('DENSE');
+  });
+
+  it('keeps the in-memory skinId when setSettings rejects (EH-2)', async () => {
+    const storage = makeMockStorage();
+    await useSettingsStore.getState().hydrate(storage);
+    storage.setSettings.mockRejectedValueOnce(new Error('write failed'));
+
+    expect(() => useSettingsStore.getState().setSkin('monoLcd')).not.toThrow();
+    expect(useSettingsStore.getState().skinId).toBe('monoLcd');
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useSettingsStore.getState().skinId).toBe('monoLcd');
   });
 });

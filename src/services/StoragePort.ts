@@ -4,6 +4,7 @@ import type {
   PresetId,
   WallBehavior,
 } from '../engine/types';
+import { SKIN_IDS, type SkinId } from '../skins/registry';
 
 /**
  * Persistence contract for Coil. Implementations (e.g. an AsyncStorage adapter)
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   wallBehavior: 'SOLID',
   soundEnabled: true,
   hapticsEnabled: true,
+  skinId: 'greenOnBlack',
 };
 
 export const DEFAULT_SCORES: PersistedScores = {
@@ -48,6 +50,10 @@ function isPresetId(value: unknown): value is PresetId {
 
 function isWallBehavior(value: unknown): value is WallBehavior {
   return WALL_BEHAVIORS.includes(value as WallBehavior);
+}
+
+function isSkinId(value: unknown): value is SkinId {
+  return SKIN_IDS.includes(value as SkinId);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -78,6 +84,7 @@ export function validateSettings(raw: unknown): PersistedSettings {
       typeof raw.hapticsEnabled === 'boolean'
         ? raw.hapticsEnabled
         : DEFAULT_SETTINGS.hapticsEnabled,
+    skinId: isSkinId(raw.skinId) ? raw.skinId : DEFAULT_SETTINGS.skinId,
   };
 }
 

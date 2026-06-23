@@ -44,6 +44,7 @@ function makeState(over: Partial<GameState> & { snake: Cell[] }): GameState {
     // Finite sentinel (not Infinity) so JSON-clone snapshots round-trip; these
     // tests run with bonus disabled, so the engine never reads this value.
     ticksUntilBonus: Number.MAX_SAFE_INTEGER,
+    obstacles: [],
     ...over,
   };
 }

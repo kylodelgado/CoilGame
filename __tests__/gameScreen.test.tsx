@@ -46,6 +46,7 @@ function baseState(over: Partial<GameState> = {}): GameState {
     bonusFood: null,
     bonusRemaining: 0,
     ticksUntilBonus: Infinity,
+    obstacles: [],
     ...over,
   };
 }

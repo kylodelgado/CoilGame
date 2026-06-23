@@ -24,6 +24,7 @@ function makeFake(init: Live) {
       bonusFood: null,
       bonusRemaining: 0,
       ticksUntilBonus: Infinity,
+      obstacles: [],
     }),
     step,
     tapToStart: jest.fn(),

@@ -26,6 +26,11 @@ function emptyCells(
   if (opts.excludeBonus && state.bonusFood !== null) {
     occupied.add(state.bonusFood.y * columns + state.bonusFood.x);
   }
+  // Obstacles are always excluded — neither food nor bonus spawns on one,
+  // and an all-obstacle remainder is the obstacle-aware win signal. (EH-18/19)
+  for (const o of state.obstacles) {
+    occupied.add(o.y * columns + o.x);
+  }
 
   const empty: Cell[] = [];
   for (let y = 0; y < rows; y++) {

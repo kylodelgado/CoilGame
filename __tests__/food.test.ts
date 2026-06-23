@@ -33,6 +33,7 @@ function makeState(snake: Cell[]): GameState {
     bonusFood: null,
     bonusRemaining: 0,
     ticksUntilBonus: Infinity,
+    obstacles: [],
   };
 }
 

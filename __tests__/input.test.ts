@@ -21,6 +21,7 @@ function makeState(
     bonusFood: null,
     bonusRemaining: 0,
     ticksUntilBonus: Infinity,
+    obstacles: [],
   };
 }
 

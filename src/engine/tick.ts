@@ -125,7 +125,9 @@ export function tick(
   const willGrow = state.food !== null && sameCell(nextHead, state.food);
 
   // 5. Self-collision with tail-follow: a non-growing snake vacates its tail
-  //    this same tick, so that cell is safe to enter.
+  //    this same tick, so that cell is safe to enter. Obstacles are treated like
+  //    body cells — always blocking, never vacated — so a head entering one dies
+  //    in BOTH wall behaviors (the check runs after wall resolution).
   const lastIndex = state.snake.length - 1;
   const occupied = new Set<number>();
   state.snake.forEach((c, i) => {
@@ -134,6 +136,9 @@ export function tick(
     }
     occupied.add(cellIndex(c));
   });
+  for (const o of state.obstacles) {
+    occupied.add(cellIndex(o));
+  }
   if (occupied.has(cellIndex(nextHead))) {
     return {
       state: { ...state, direction, inputQueue, status: 'LOST' },

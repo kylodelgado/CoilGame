@@ -83,6 +83,12 @@ export interface GameState {
    * touches it in that case, keeping classic play byte-identical.
    */
   ticksUntilBonus: number;
+  /**
+   * Cells currently blocked: the snake dies on contact and spawns avoid them.
+   * Empty for classic play (byte-identical). A Mode mutates this between ticks;
+   * the engine treats it as read-only within a single tick. (Dynamic Walls)
+   */
+  obstacles: Cell[];
 }
 
 export type ControlScheme = 'SWIPE' | 'DPAD';

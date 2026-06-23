@@ -38,6 +38,7 @@ export function createInitialState(
     ticksUntilBonus: config.bonus.enabled
       ? config.bonus.spawnEveryTicks
       : BONUS_DISABLED,
+    obstacles: [],
   };
 
   return { ...base, food: spawnFood(base, config, rng) };

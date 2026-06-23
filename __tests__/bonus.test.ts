@@ -47,6 +47,7 @@ function makeState(over: Partial<GameState> & { snake: Cell[] }): GameState {
     bonusFood: null,
     bonusRemaining: 0,
     ticksUntilBonus: BONUS_DISABLED,
+    obstacles: [],
     ...over,
   };
 }
@@ -67,6 +68,7 @@ describe('bonus food (engine extension, step 34)', () => {
         ],
         food: { x: 4, y: 5 },
         ticksUntilBonus: BONUS_DISABLED,
+        obstacles: [],
       });
 
       for (let i = 0; i < 12; i++) {
@@ -103,6 +105,7 @@ describe('bonus food (engine extension, step 34)', () => {
         ],
         food: { x: 0, y: 0 },
         ticksUntilBonus: spawnEveryTicks,
+        obstacles: [],
       });
 
       for (let t = 1; t <= spawnEveryTicks; t++) {
@@ -141,6 +144,7 @@ describe('bonus food (engine extension, step 34)', () => {
         bonusFood: { x: 8, y: 2 },
         bonusRemaining: lifetimeTicks,
         ticksUntilBonus: 60,
+        obstacles: [],
       });
 
       const expiredOn: number[] = [];
@@ -182,6 +186,7 @@ describe('bonus food (engine extension, step 34)', () => {
         bonusFood: { x: 6, y: 5 }, // directly ahead of the head
         bonusRemaining: 5,
         ticksUntilBonus: 60,
+        obstacles: [],
       });
 
       const { state: next, events } = tick(state, config, rng());
@@ -213,6 +218,7 @@ describe('bonus food (engine extension, step 34)', () => {
         ],
         food: { x: 6, y: 5 }, // directly ahead
         ticksUntilBonus: 60,
+        obstacles: [],
       });
 
       const { state: next, events } = tick(state, config, rng());
@@ -276,6 +282,7 @@ describe('bonus food (engine extension, step 34)', () => {
         ],
         food: { x: 0, y: 0 },
         ticksUntilBonus: 1,
+        obstacles: [],
       });
       const snapshot = JSON.parse(JSON.stringify(state)) as GameState;
 

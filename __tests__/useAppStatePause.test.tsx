@@ -20,6 +20,7 @@ function makeFake(status: GameState['status']) {
       bonusFood: null,
       bonusRemaining: 0,
       ticksUntilBonus: Infinity,
+      obstacles: [],
     }),
     pause,
     tapToStart: jest.fn(),

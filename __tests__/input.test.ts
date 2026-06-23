@@ -18,6 +18,9 @@ function makeState(
     score: 0,
     foodEaten: 0,
     tickMs: 200,
+    bonusFood: null,
+    bonusRemaining: 0,
+    ticksUntilBonus: Infinity,
   };
 }
 

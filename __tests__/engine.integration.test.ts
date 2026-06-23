@@ -30,6 +30,7 @@ function makeConfig(): GameConfig {
     pointsPerFood: 10,
     startLength: 3,
     startDirection: 'RIGHT',
+    bonus: { enabled: false, spawnEveryTicks: 60, lifetimeTicks: 25, points: 50 },
   };
 }
 

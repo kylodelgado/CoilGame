@@ -40,6 +40,17 @@ export interface Preset {
   accelMsPerFood: number;
 }
 
+/** Bonus-food tunables. When disabled the engine is a byte-identical classic. */
+export interface BonusConfig {
+  enabled: boolean;
+  /** Ticks between bonus spawns (countdown restarts after each despawn). */
+  spawnEveryTicks: number;
+  /** How many ticks a spawned bonus stays on the board before expiring. */
+  lifetimeTicks: number;
+  /** Extra points awarded for eating a bonus (no snake growth). */
+  points: number;
+}
+
 export interface GameConfig {
   grid: GridSpec;
   wallBehavior: WallBehavior;
@@ -49,6 +60,7 @@ export interface GameConfig {
   pointsPerFood: number;
   startLength: number;
   startDirection: Direction;
+  bonus: BonusConfig;
 }
 
 export interface GameState {
@@ -61,6 +73,16 @@ export interface GameState {
   score: number;
   foodEaten: number;
   tickMs: number;
+  /** Active bonus pickup, or null when none is on the board. */
+  bonusFood: Cell | null;
+  /** Ticks until the current bonus expires; 0 when no bonus is active. */
+  bonusRemaining: number;
+  /**
+   * Ticks until the next bonus spawn. Counts down only while no bonus is on the
+   * board. BONUS_DISABLED (Infinity) when bonus is disabled — the engine never
+   * touches it in that case, keeping classic play byte-identical.
+   */
+  ticksUntilBonus: number;
 }
 
 export interface PersistedSettings {
@@ -76,7 +98,12 @@ export interface PersistedScores {
   bestPortal: number;
 }
 
-export type GameEvent = 'ATE_FOOD' | 'DIED' | 'WON';
+export type GameEvent =
+  | 'ATE_FOOD'
+  | 'DIED'
+  | 'WON'
+  | 'ATE_BONUS'
+  | 'BONUS_EXPIRED';
 
 export interface TickResult {
   state: GameState;

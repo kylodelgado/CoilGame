@@ -25,6 +25,13 @@ export const classicMode: Mode = {
       pointsPerFood: POINTS_PER_FOOD,
       startLength: START_LENGTH,
       startDirection: START_DIRECTION,
+      // Bonus is wired up but disabled here; step 35 enables it with tunables.
+      bonus: {
+        enabled: false,
+        spawnEveryTicks: 60,
+        lifetimeTicks: 25,
+        points: 50,
+      },
     };
   },
 

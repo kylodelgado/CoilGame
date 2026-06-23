@@ -32,6 +32,9 @@ function makeState(over: Partial<GameState> & { snake: Cell[] }): GameState {
     score: 0,
     foodEaten: 0,
     tickMs: 200,
+    bonusFood: null,
+    bonusRemaining: 0,
+    ticksUntilBonus: Infinity,
     ...over,
   };
 }

@@ -44,6 +44,12 @@ describe('classicMode (mode seam)', () => {
         pointsPerFood: POINTS_PER_FOOD,
         startLength: START_LENGTH,
         startDirection: START_DIRECTION,
+        bonus: {
+          enabled: false,
+          spawnEveryTicks: 60,
+          lifetimeTicks: 25,
+          points: 50,
+        },
       };
       expect(config).toEqual(expected);
       expect(config.pointsPerFood).toBe(10);

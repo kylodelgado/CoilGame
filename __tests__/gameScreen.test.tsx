@@ -24,6 +24,7 @@ const CONFIG: GameConfig = {
   pointsPerFood: 10,
   startLength: 3,
   startDirection: 'RIGHT',
+  bonus: { enabled: false, spawnEveryTicks: 60, lifetimeTicks: 25, points: 50 },
 };
 
 const SNAKE: Cell[] = [
@@ -42,6 +43,9 @@ function baseState(over: Partial<GameState> = {}): GameState {
     foodEaten: 0,
     tickMs: 100,
     snake: SNAKE,
+    bonusFood: null,
+    bonusRemaining: 0,
+    ticksUntilBonus: Infinity,
     ...over,
   };
 }

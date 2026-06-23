@@ -162,6 +162,9 @@ describe('acceptance: haptics gating + silent sound, end to end', () => {
     foodEaten: 0,
     tickMs: 100,
     snake: baseSnake,
+    bonusFood: null,
+    bonusRemaining: 0,
+    ticksUntilBonus: Infinity,
   };
   const ate: TickResult = {
     state: { ...initial, score: 10, foodEaten: 1 },
@@ -232,6 +235,9 @@ describe('acceptance: full Home -> play -> terminal -> Play Again loop', () => {
       { x: 3, y: 4 },
       { x: 2, y: 4 },
     ],
+    bonusFood: null,
+    bonusRemaining: 0,
+    ticksUntilBonus: Infinity,
   };
   const lost: TickResult = {
     state: { ...initial, status: 'LOST', score: 80 },

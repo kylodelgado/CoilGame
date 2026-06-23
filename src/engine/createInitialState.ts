@@ -1,5 +1,5 @@
 import type { RandomPort } from '../services/RandomPort';
-import { spawnFood } from './food';
+import { spawnFood, BONUS_DISABLED } from './food';
 import type { Cell, GameConfig, GameState } from './types';
 
 /**
@@ -32,6 +32,12 @@ export function createInitialState(
     score: 0,
     foodEaten: 0,
     tickMs: config.baseTickMs,
+    bonusFood: null,
+    bonusRemaining: 0,
+    // Countdown begins immediately when enabled; a disabled sentinel otherwise.
+    ticksUntilBonus: config.bonus.enabled
+      ? config.bonus.spawnEveryTicks
+      : BONUS_DISABLED,
   };
 
   return { ...base, food: spawnFood(base, config, rng) };

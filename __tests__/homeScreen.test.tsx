@@ -30,7 +30,7 @@ jest.mock('expo-router', () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   useSettingsStore.setState({ ...DEFAULT_SETTINGS, hydrated: true });
-  useScoresStore.setState({ bestSolid: 0, bestPortal: 0, hydrated: true });
+  useScoresStore.setState({ bests: {}, hydrated: true });
 });
 
 const renderHome = () =>
@@ -67,16 +67,59 @@ describe('HomeScreen selection flow (FR-UI1/UI2)', () => {
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/game',
-      params: { presetId: 'CLASSIC', wall: 'PORTAL' },
+      params: { presetId: 'CLASSIC', wall: 'PORTAL', modeId: 'CLASSIC' },
     });
   });
 
-  it('renders both high scores from the scores store', () => {
-    useScoresStore.setState({ bestSolid: 120, bestPortal: 80, hydrated: true });
+  it('renders both high scores for the selected mode', () => {
+    useScoresStore.setState({
+      bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 80 },
+      hydrated: true,
+    });
     renderHome();
 
     expect(screen.getByTestId('best-solid')).toHaveTextContent('120');
     expect(screen.getByTestId('best-portal')).toHaveTextContent('80');
+  });
+
+  describe('mode picker (Prompt 40)', () => {
+    it('selecting a mode updates the store and the shown scores follow the mode', () => {
+      useScoresStore.setState({
+        bests: {
+          'CLASSIC:SOLID': 120,
+          'CLASSIC:PORTAL': 80,
+          'DYNAMIC_WALLS:SOLID': 45,
+          'DYNAMIC_WALLS:PORTAL': 12,
+        },
+        hydrated: true,
+      });
+      renderHome();
+
+      // Defaults to CLASSIC.
+      expect(screen.getByTestId('best-solid')).toHaveTextContent('120');
+      expect(screen.getByTestId('best-portal')).toHaveTextContent('80');
+
+      fireEvent.press(screen.getByTestId('mode-DYNAMIC_WALLS'));
+
+      expect(useSettingsStore.getState().modeId).toBe('DYNAMIC_WALLS');
+      expect(screen.getByTestId('best-solid')).toHaveTextContent('45');
+      expect(screen.getByTestId('best-portal')).toHaveTextContent('12');
+      expect(
+        screen.getByTestId('mode-DYNAMIC_WALLS').props.accessibilityState
+          .selected,
+      ).toBe(true);
+    });
+
+    it('Play passes the selected mode', () => {
+      renderHome();
+      fireEvent.press(screen.getByTestId('mode-DYNAMIC_WALLS'));
+      fireEvent.press(screen.getByTestId('play-button'));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/game',
+        params: { presetId: 'STANDARD', wall: 'SOLID', modeId: 'DYNAMIC_WALLS' },
+      });
+    });
   });
 
   it('toggling the wall updates the settings store wallBehavior', () => {

@@ -26,10 +26,11 @@ function makeMockStorage(): jest.Mocked<StoragePort> {
         hapticsEnabled: true,
         skinId: 'greenOnBlack' as const,
         controlScheme: 'SWIPE' as const,
+        modeId: 'CLASSIC' as const,
       }),
     ),
     setSettings: jest.fn((_s) => Promise.resolve()),
-    getScores: jest.fn(() => Promise.resolve({ bestSolid: 0, bestPortal: 0 })),
+    getScores: jest.fn(() => Promise.resolve({ bests: {} })),
     setScores: jest.fn((_s) => Promise.resolve()),
     resetScores: jest.fn(() => Promise.resolve()),
   };
@@ -59,7 +60,11 @@ describe('navigation scaffold', () => {
     expect(mockPush).toHaveBeenCalledTimes(1);
     const arg = mockPush.mock.calls[0][0];
     expect(arg.pathname).toBe('/game');
-    expect(arg.params).toEqual({ presetId: 'STANDARD', wall: 'SOLID' });
+    expect(arg.params).toEqual({
+      presetId: 'STANDARD',
+      wall: 'SOLID',
+      modeId: 'CLASSIC',
+    });
   });
 
   it('navigates to settings when the gear is pressed', () => {

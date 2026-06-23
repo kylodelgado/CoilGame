@@ -14,6 +14,7 @@ import type {
   Cell,
   Direction,
   GameState,
+  ModeId,
   Preset,
   PresetId,
   WallBehavior,
@@ -81,12 +82,17 @@ export function GameScreen(props: GameScreenProps = {}) {
   const routerRef = useRef(router);
   routerRef.current = router;
   const skin = useSkin();
-  const params = useLocalSearchParams<{ presetId?: string; wall?: string }>();
+  const params = useLocalSearchParams<{
+    presetId?: string;
+    wall?: string;
+    modeId?: string;
+  }>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const storePreset = useSettingsStore((s) => s.presetId);
   const storeWall = useSettingsStore((s) => s.wallBehavior);
+  const storeMode = useSettingsStore((s) => s.modeId);
   const controlScheme = useSettingsStore((s) => s.controlScheme);
 
   // Prefer route params, fall back to the settings store.
@@ -99,6 +105,10 @@ export function GameScreen(props: GameScreenProps = {}) {
     params.wall === 'SOLID' || params.wall === 'PORTAL'
       ? params.wall
       : storeWall;
+  const modeId: ModeId =
+    params.modeId === 'CLASSIC' || params.modeId === 'DYNAMIC_WALLS'
+      ? params.modeId
+      : storeMode;
 
   const mode = props.mode ?? classicMode;
   const rng = useMemo(() => props.rng ?? createMathRandom(), [props.rng]);
@@ -140,10 +150,11 @@ export function GameScreen(props: GameScreenProps = {}) {
           elapsedMs: String(elapsedMs),
           presetId,
           wall,
+          modeId,
         },
       });
     },
-    [presetId, wall],
+    [presetId, wall, modeId],
   );
 
   // The controller owns authoritative state; recreate only when config changes.
@@ -157,11 +168,14 @@ export function GameScreen(props: GameScreenProps = {}) {
         sound,
         isHapticsEnabled: () => useSettingsStore.getState().hapticsEnabled,
         isSoundEnabled: () => useSettingsStore.getState().soundEnabled,
-        recordRun: (w, score) => useScoresStore.getState().recordRun(w, score),
+        // modeId is threaded into the controller properly in step 41; for now
+        // the screen records under the selected mode.
+        recordRun: (w, score) =>
+          useScoresStore.getState().recordRun(modeId, w, score),
         onState: (state) => setProjection(toProjection(state)),
         onTerminal,
       }),
-    [mode, config, rng, haptics, sound, onTerminal],
+    [mode, config, rng, haptics, sound, onTerminal, modeId],
   );
 
   // Seed the projection from the freshly created controller's initial state.

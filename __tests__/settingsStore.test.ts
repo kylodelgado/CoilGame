@@ -13,7 +13,7 @@ function makeMockStorage(
     setSettings: jest.fn((_s: PersistedSettings): Promise<void> =>
       Promise.resolve(),
     ),
-    getScores: jest.fn(() => Promise.resolve({ bestSolid: 0, bestPortal: 0 })),
+    getScores: jest.fn(() => Promise.resolve({ bests: {} })),
     setScores: jest.fn((_s) => Promise.resolve()),
     resetScores: jest.fn(() => Promise.resolve()),
   };
@@ -42,6 +42,7 @@ describe('useSettingsStore', () => {
       hapticsEnabled: false,
       skinId: 'amberCrt',
       controlScheme: 'DPAD',
+      modeId: 'DYNAMIC_WALLS',
     };
     const storage = makeMockStorage(persisted);
 

@@ -21,7 +21,7 @@ function makeMockStorage(): jest.Mocked<StoragePort> {
   return {
     getSettings: jest.fn(() => Promise.resolve({ ...DEFAULT_SETTINGS })),
     setSettings: jest.fn((_s) => Promise.resolve()),
-    getScores: jest.fn(() => Promise.resolve({ bestSolid: 0, bestPortal: 0 })),
+    getScores: jest.fn(() => Promise.resolve({ bests: {} })),
     setScores: jest.fn((_s) => Promise.resolve()),
     resetScores: jest.fn(() => Promise.resolve()),
   };
@@ -33,7 +33,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   storage = makeMockStorage();
   useSettingsStore.setState({ ...DEFAULT_SETTINGS, hydrated: false });
-  useScoresStore.setState({ bestSolid: 0, bestPortal: 0, hydrated: false });
+  useScoresStore.setState({ bests: {}, hydrated: false });
   // Wire the settings store's persistence to our mock storage.
   await useSettingsStore.getState().hydrate(storage);
   storage.setSettings.mockClear();

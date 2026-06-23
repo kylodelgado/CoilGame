@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   ControlScheme,
+  ModeId,
   PersistedSettings,
   PresetId,
   WallBehavior,
@@ -15,6 +16,7 @@ interface SettingsState {
   hapticsEnabled: boolean;
   skinId: SkinId;
   controlScheme: ControlScheme;
+  modeId: ModeId;
   hydrated: boolean;
 
   hydrate(storage: StoragePort): Promise<void>;
@@ -24,6 +26,7 @@ interface SettingsState {
   setHaptics(on: boolean): void;
   setSkin(id: SkinId): void;
   setControlScheme(s: ControlScheme): void;
+  setMode(id: ModeId): void;
 }
 
 /** The StoragePort injected at hydrate time; setters persist through it. */
@@ -38,6 +41,7 @@ function toPersisted(state: SettingsState): PersistedSettings {
     hapticsEnabled: state.hapticsEnabled,
     skinId: state.skinId,
     controlScheme: state.controlScheme,
+    modeId: state.modeId,
   };
 }
 
@@ -90,6 +94,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     setControlScheme(s: ControlScheme): void {
       set({ controlScheme: s });
+      persist();
+    },
+
+    setMode(id: ModeId): void {
+      set({ modeId: id });
       persist();
     },
   };

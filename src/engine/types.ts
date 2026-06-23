@@ -103,11 +103,16 @@ export interface PersistedSettings {
   hapticsEnabled: boolean;
   skinId: SkinId;
   controlScheme: ControlScheme;
+  modeId: ModeId;
 }
 
+/**
+ * High scores keyed by `${ModeId}:${WallBehavior}` (e.g. 'CLASSIC:SOLID'). A
+ * second mode made the old flat { bestSolid, bestPortal } ambiguous, so scores
+ * migrated from coil.scores.v1 (flat) to coil.scores.v2 (this keyed record).
+ */
 export interface PersistedScores {
-  bestSolid: number;
-  bestPortal: number;
+  bests: Record<string, number>;
 }
 
 export type GameEvent =

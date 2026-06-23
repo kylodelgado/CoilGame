@@ -37,7 +37,7 @@ const wrap = (node: React.ReactElement) =>
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
-  useScoresStore.setState({ bestSolid: 0, bestPortal: 0, hydrated: true });
+  useScoresStore.setState({ bests: {}, hydrated: true });
 });
 
 describe('PauseOverlay (FR-P3, FR-P6)', () => {
@@ -77,7 +77,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
       presetId: 'STANDARD',
       wall: 'SOLID',
     };
-    useScoresStore.setState({ bestSolid: 120, bestPortal: 5, hydrated: true });
+    useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 5 }, hydrated: true });
     wrap(<WinScreen />);
 
     expect(screen.getByTestId('final-score')).toHaveTextContent('120');
@@ -96,7 +96,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
       presetId: 'STANDARD',
       wall: 'SOLID',
     };
-    useScoresStore.setState({ bestSolid: 200, bestPortal: 5, hydrated: true });
+    useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 200, 'CLASSIC:PORTAL': 5 }, hydrated: true });
     wrap(<WinScreen />);
 
     // Primary figures still present.
@@ -140,7 +140,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
       presetId: 'DENSE',
       wall: 'PORTAL',
     };
-    useScoresStore.setState({ bestSolid: 999, bestPortal: 80, hydrated: true });
+    useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 999, 'CLASSIC:PORTAL': 80 }, hydrated: true });
     wrap(<LossScreen />);
 
     expect(screen.getByTestId('final-score')).toHaveTextContent('50');

@@ -80,17 +80,13 @@ describe('acceptance: six preset × wall combinations', () => {
       expect(config.wallBehavior).toBe(wall);
 
       useScoresStore.setState({ ...DEFAULT_SCORES, hydrated: true });
-      const result = useScoresStore.getState().recordRun(wall, 100);
+      const result = useScoresStore.getState().recordRun('CLASSIC', wall, 100);
       expect(result.isNewBest).toBe(true);
 
       const scores = useScoresStore.getState();
-      if (wall === 'SOLID') {
-        expect(scores.bestSolid).toBe(100);
-        expect(scores.bestPortal).toBe(0);
-      } else {
-        expect(scores.bestPortal).toBe(100);
-        expect(scores.bestSolid).toBe(0);
-      }
+      const other: typeof wall = wall === 'SOLID' ? 'PORTAL' : 'SOLID';
+      expect(scores.getBest('CLASSIC', wall)).toBe(100);
+      expect(scores.getBest('CLASSIC', other)).toBe(0);
     },
   );
 });
@@ -107,8 +103,8 @@ describe('acceptance: persistence survives relaunch', () => {
     useSettingsStore.getState().setWall('PORTAL');
     useSettingsStore.getState().setSound(false);
     useSettingsStore.getState().setHaptics(false);
-    useScoresStore.getState().recordRun('PORTAL', 150);
-    useScoresStore.getState().recordRun('SOLID', 70);
+    useScoresStore.getState().recordRun('CLASSIC', 'PORTAL', 150);
+    useScoresStore.getState().recordRun('CLASSIC', 'SOLID', 70);
     await flush();
 
     // Relaunch: drop in-memory state, re-create stores from the same storage.
@@ -124,8 +120,8 @@ describe('acceptance: persistence survives relaunch', () => {
     expect(settings.hapticsEnabled).toBe(false);
 
     const scores = useScoresStore.getState();
-    expect(scores.bestPortal).toBe(150);
-    expect(scores.bestSolid).toBe(70);
+    expect(scores.getBest('CLASSIC', 'PORTAL')).toBe(150);
+    expect(scores.getBest('CLASSIC', 'SOLID')).toBe(70);
   });
 
   it('degrades corrupt/missing persisted data to defaults without crashing', async () => {
@@ -137,8 +133,7 @@ describe('acceptance: persistence survives relaunch', () => {
     await useScoresStore.getState().hydrate(adapter);
 
     expect(useSettingsStore.getState()).toMatchObject(DEFAULT_SETTINGS);
-    expect(useScoresStore.getState().bestSolid).toBe(0);
-    expect(useScoresStore.getState().bestPortal).toBe(0);
+    expect(useScoresStore.getState().bests).toEqual({});
   });
 });
 
@@ -272,7 +267,7 @@ describe('acceptance: full Home -> play -> terminal -> Play Again loop', () => {
     fireEvent.press(home.getByTestId('play-button'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/game',
-      params: { presetId: 'DENSE', wall: 'PORTAL' },
+      params: { presetId: 'DENSE', wall: 'PORTAL', modeId: 'CLASSIC' },
     });
     home.unmount();
 

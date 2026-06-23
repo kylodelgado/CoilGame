@@ -4,7 +4,9 @@ import {
   DEFAULT_SCORES,
   DEFAULT_SETTINGS,
   SCORES_KEY,
+  SCORES_KEY_V1,
   SETTINGS_KEY,
+  migrateScores,
   validateScores,
   validateSettings,
   type StoragePort,
@@ -47,8 +49,28 @@ export function createAsyncStorageAdapter(): StoragePort {
       return AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     },
 
-    getScores(): Promise<PersistedScores> {
-      return readValidated(SCORES_KEY, validateScores, DEFAULT_SCORES);
+    async getScores(): Promise<PersistedScores> {
+      try {
+        // Prefer the current v2 record.
+        const v2 = await AsyncStorage.getItem(SCORES_KEY);
+        if (v2 !== null) {
+          return validateScores(JSON.parse(v2));
+        }
+        // No v2 yet: migrate a legacy v1 blob forward (and persist it), if any.
+        const v1 = await AsyncStorage.getItem(SCORES_KEY_V1);
+        if (v1 !== null) {
+          const migrated = migrateScores(JSON.parse(v1));
+          try {
+            await AsyncStorage.setItem(SCORES_KEY, JSON.stringify(migrated));
+          } catch {
+            // Best-effort write-back; returning the migrated value still works.
+          }
+          return migrated;
+        }
+        return { ...DEFAULT_SCORES };
+      } catch {
+        return { ...DEFAULT_SCORES };
+      }
     },
 
     setScores(s: PersistedScores): Promise<void> {

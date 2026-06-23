@@ -79,7 +79,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   useSettingsStore.setState({ ...DEFAULT_SETTINGS, hydrated: true });
-  useScoresStore.setState({ bestSolid: 0, bestPortal: 0, hydrated: true });
+  useScoresStore.setState({ bests: {}, hydrated: true });
 });
 afterEach(() => {
   jest.clearAllTimers();

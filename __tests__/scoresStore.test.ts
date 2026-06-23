@@ -15,6 +15,7 @@ function makeMockStorage(
         hapticsEnabled: true,
         skinId: 'greenOnBlack' as const,
         controlScheme: 'SWIPE' as const,
+        modeId: 'CLASSIC' as const,
       }),
     ),
     setSettings: jest.fn((_s) => Promise.resolve()),
@@ -28,65 +29,66 @@ beforeEach(() => {
   useScoresStore.setState({ ...DEFAULT_SCORES, hydrated: false });
 });
 
-describe('useScoresStore (FR-SC3/4, §8.4)', () => {
-  it('records a higher SOLID score as a new best and persists', () => {
+describe('useScoresStore (mode×wall keyed, Prompt 40)', () => {
+  it('records a higher score as a new best keyed by mode:wall and persists', () => {
     const storage = makeMockStorage();
     void useScoresStore.getState().hydrate(storage);
 
-    const result = useScoresStore.getState().recordRun('SOLID', 120);
+    const result = useScoresStore.getState().recordRun('CLASSIC', 'SOLID', 120);
 
     expect(result).toEqual({ isNewBest: true });
-    const state = useScoresStore.getState();
-    expect(state.bestSolid).toBe(120);
-    expect(state.bestPortal).toBe(0); // untouched
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(120);
     expect(storage.setScores).toHaveBeenCalledWith({
-      bestSolid: 120,
-      bestPortal: 0,
+      bests: { 'CLASSIC:SOLID': 120 },
     });
   });
 
   it('does not update or persist when the score is below the current best', async () => {
-    const storage = makeMockStorage({ bestSolid: 200, bestPortal: 0 });
+    const storage = makeMockStorage({ bests: { 'CLASSIC:SOLID': 200 } });
     await useScoresStore.getState().hydrate(storage);
     storage.setScores.mockClear();
 
-    const result = useScoresStore.getState().recordRun('SOLID', 150);
+    const result = useScoresStore.getState().recordRun('CLASSIC', 'SOLID', 150);
 
     expect(result).toEqual({ isNewBest: false });
-    expect(useScoresStore.getState().bestSolid).toBe(200);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(200);
     expect(storage.setScores).not.toHaveBeenCalled();
   });
 
   it('does not treat an equal score as a new best', () => {
-    const storage = makeMockStorage();
-    useScoresStore.setState({ bestSolid: 100, bestPortal: 0, hydrated: true });
+    useScoresStore.setState({
+      bests: { 'CLASSIC:SOLID': 100 },
+      hydrated: true,
+    });
 
-    const result = useScoresStore.getState().recordRun('SOLID', 100);
+    const result = useScoresStore.getState().recordRun('CLASSIC', 'SOLID', 100);
 
     expect(result).toEqual({ isNewBest: false });
-    expect(useScoresStore.getState().bestSolid).toBe(100);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(100);
   });
 
-  it('tracks SOLID and PORTAL bests independently', async () => {
+  it('keys each mode×wall board independently', async () => {
     const storage = makeMockStorage();
     await useScoresStore.getState().hydrate(storage);
 
-    useScoresStore.getState().recordRun('SOLID', 50);
-    useScoresStore.getState().recordRun('PORTAL', 80);
+    useScoresStore.getState().recordRun('CLASSIC', 'SOLID', 50);
+    useScoresStore.getState().recordRun('DYNAMIC_WALLS', 'SOLID', 80);
 
-    const state = useScoresStore.getState();
-    expect(state.bestSolid).toBe(50);
-    expect(state.bestPortal).toBe(80);
+    // CLASSIC:SOLID and DYNAMIC_WALLS:SOLID are independent.
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(50);
+    expect(useScoresStore.getState().getBest('DYNAMIC_WALLS', 'SOLID')).toBe(80);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'PORTAL')).toBe(0);
 
-    // A PORTAL run does not affect the SOLID best and vice versa.
-    expect(useScoresStore.getState().recordRun('SOLID', 60)).toEqual({
-      isNewBest: true,
-    });
-    expect(useScoresStore.getState().recordRun('PORTAL', 70)).toEqual({
-      isNewBest: false,
-    });
-    expect(useScoresStore.getState().bestSolid).toBe(60);
-    expect(useScoresStore.getState().bestPortal).toBe(80);
+    // A DYNAMIC_WALLS run does not affect the CLASSIC best.
+    expect(
+      useScoresStore.getState().recordRun('DYNAMIC_WALLS', 'SOLID', 70),
+    ).toEqual({ isNewBest: false });
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(50);
+  });
+
+  it('getBest returns 0 for an unseen board', () => {
+    useScoresStore.setState({ bests: {}, hydrated: true });
+    expect(useScoresStore.getState().getBest('DYNAMIC_WALLS', 'PORTAL')).toBe(0);
   });
 
   it('keeps the in-memory best even if setScores rejects (EH-3)', async () => {
@@ -96,37 +98,38 @@ describe('useScoresStore (FR-SC3/4, §8.4)', () => {
 
     let result: { isNewBest: boolean } | undefined;
     expect(() => {
-      result = useScoresStore.getState().recordRun('PORTAL', 99);
+      result = useScoresStore.getState().recordRun('CLASSIC', 'PORTAL', 99);
     }).not.toThrow();
 
     expect(result).toEqual({ isNewBest: true });
-    expect(useScoresStore.getState().bestPortal).toBe(99);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'PORTAL')).toBe(99);
     await Promise.resolve();
     await Promise.resolve();
-    expect(useScoresStore.getState().bestPortal).toBe(99);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'PORTAL')).toBe(99);
   });
 
-  it('reset zeroes both bests and calls storage.resetScores', async () => {
-    const storage = makeMockStorage({ bestSolid: 300, bestPortal: 200 });
+  it('reset clears all bests and calls storage.resetScores', async () => {
+    const storage = makeMockStorage({
+      bests: { 'CLASSIC:SOLID': 300, 'DYNAMIC_WALLS:PORTAL': 200 },
+    });
     await useScoresStore.getState().hydrate(storage);
 
     await useScoresStore.getState().reset(storage);
 
-    const state = useScoresStore.getState();
-    expect(state.bestSolid).toBe(0);
-    expect(state.bestPortal).toBe(0);
+    expect(useScoresStore.getState().bests).toEqual({});
     expect(storage.resetScores).toHaveBeenCalledTimes(1);
   });
 
-  it('hydrate loads persisted values and sets hydrated true', async () => {
-    const storage = makeMockStorage({ bestSolid: 42, bestPortal: 17 });
+  it('hydrate loads the persisted bests and sets hydrated true', async () => {
+    const storage = makeMockStorage({
+      bests: { 'CLASSIC:SOLID': 42, 'CLASSIC:PORTAL': 17 },
+    });
 
     expect(useScoresStore.getState().hydrated).toBe(false);
     await useScoresStore.getState().hydrate(storage);
 
-    const state = useScoresStore.getState();
-    expect(state.bestSolid).toBe(42);
-    expect(state.bestPortal).toBe(17);
-    expect(state.hydrated).toBe(true);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'SOLID')).toBe(42);
+    expect(useScoresStore.getState().getBest('CLASSIC', 'PORTAL')).toBe(17);
+    expect(useScoresStore.getState().hydrated).toBe(true);
   });
 });

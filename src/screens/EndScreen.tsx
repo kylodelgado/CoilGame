@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { PRESETS } from '../engine';
-import type { PresetId, WallBehavior } from '../engine/types';
+import type { ModeId, PresetId, WallBehavior } from '../engine/types';
 import { useScoresStore } from '../state/useScoresStore';
 import { useSkin } from '../skins/SkinProvider';
 
@@ -35,6 +35,7 @@ export function EndScreen({ variant }: EndScreenProps) {
     elapsedMs?: string;
     presetId?: string;
     wall?: string;
+    modeId?: string;
   }>();
 
   const score = Number(params.score ?? 0);
@@ -47,10 +48,12 @@ export function EndScreen({ variant }: EndScreenProps) {
     params.presetId && params.presetId in PRESETS
       ? (params.presetId as PresetId)
       : 'STANDARD';
+  const modeId: ModeId =
+    params.modeId === 'DYNAMIC_WALLS' ? 'DYNAMIC_WALLS' : 'CLASSIC';
 
-  const bestSolid = useScoresStore((s) => s.bestSolid);
-  const bestPortal = useScoresStore((s) => s.bestPortal);
-  const high = wall === 'SOLID' ? bestSolid : bestPortal;
+  // Subscribe to the bests record so the shown high score is reactive.
+  const bests = useScoresStore((s) => s.bests);
+  const high = bests[`${modeId}:${wall}`] ?? 0;
 
   const title = variant === 'win' ? 'Perfect!' : 'Game Over';
   const subtitle =

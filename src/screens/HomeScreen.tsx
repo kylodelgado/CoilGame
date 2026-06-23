@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { PRESETS } from '../engine';
-import type { PresetId, WallBehavior } from '../engine/types';
+import type { ModeId, PresetId, WallBehavior } from '../engine/types';
 import { PresetPreview } from '../render/PresetPreview';
 import { useSettingsStore } from '../state/useSettingsStore';
 import { useScoresStore } from '../state/useScoresStore';
@@ -9,6 +9,10 @@ import { useSkin } from '../skins/SkinProvider';
 
 const PRESET_ORDER: PresetId[] = ['CLASSIC', 'STANDARD', 'DENSE'];
 const WALLS: WallBehavior[] = ['SOLID', 'PORTAL'];
+const MODE_OPTIONS: ReadonlyArray<readonly [ModeId, string]> = [
+  ['CLASSIC', 'Classic'],
+  ['DYNAMIC_WALLS', 'Dynamic Walls'],
+];
 const PREVIEW_W = 100;
 const PREVIEW_H = 130;
 
@@ -24,11 +28,15 @@ export function HomeScreen() {
 
   const presetId = useSettingsStore((s) => s.presetId);
   const wallBehavior = useSettingsStore((s) => s.wallBehavior);
+  const modeId = useSettingsStore((s) => s.modeId);
   const setPreset = useSettingsStore((s) => s.setPreset);
   const setWall = useSettingsStore((s) => s.setWall);
+  const setMode = useSettingsStore((s) => s.setMode);
 
-  const bestSolid = useScoresStore((s) => s.bestSolid);
-  const bestPortal = useScoresStore((s) => s.bestPortal);
+  // Scores are keyed by mode×wall; the shown bests follow the selected mode.
+  const bests = useScoresStore((s) => s.bests);
+  const bestSolid = bests[`${modeId}:SOLID`] ?? 0;
+  const bestPortal = bests[`${modeId}:PORTAL`] ?? 0;
 
   return (
     <View style={[styles.container, { backgroundColor: skin.background }]}>
@@ -57,6 +65,35 @@ export function HomeScreen() {
             {bestPortal}
           </Text>
         </View>
+      </View>
+
+      <View style={styles.modeToggle}>
+        {MODE_OPTIONS.map(([id, label]) => {
+          const active = modeId === id;
+          return (
+            <Pressable
+              key={id}
+              testID={`mode-${id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} mode`}
+              accessibilityState={{ selected: active }}
+              onPress={() => setMode(id)}
+              style={[
+                styles.modeOption,
+                active && { borderColor: skin.snakeHead },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modeLabel,
+                  { color: active ? skin.snakeHead : skin.snakeBody },
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <ScrollView
@@ -132,7 +169,7 @@ export function HomeScreen() {
         onPress={() =>
           router.push({
             pathname: '/game',
-            params: { presetId, wall: wallBehavior },
+            params: { presetId, wall: wallBehavior, modeId },
           })
         }
       >
@@ -166,6 +203,16 @@ const styles = StyleSheet.create({
   scoreItem: { alignItems: 'center' },
   scoreLabel: { color: '#888', fontSize: 13, letterSpacing: 1 },
   scoreValue: { fontSize: 28, fontWeight: '700' },
+  modeToggle: { flexDirection: 'row', gap: 12 },
+  modeOption: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: '#141414',
+  },
+  modeLabel: { fontSize: 15, fontWeight: '600' },
   presetRow: { gap: 16, paddingHorizontal: 8 },
   presetItem: { alignItems: 'center', gap: 8 },
   presetLabel: { fontSize: 14, fontWeight: '600' },

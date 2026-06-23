@@ -4,6 +4,7 @@ import {
   DEFAULT_SCORES,
   DEFAULT_SETTINGS,
   SCORES_KEY,
+  SCORES_KEY_V1,
   SETTINGS_KEY,
 } from '../src/services/StoragePort';
 import type { PersistedScores, PersistedSettings } from '../src/engine/types';
@@ -54,6 +55,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
       hapticsEnabled: true,
       skinId: 'amberCrt',
       controlScheme: 'DPAD',
+      modeId: 'DYNAMIC_WALLS',
     };
     await adapter.setSettings(settings);
     await expect(adapter.getSettings()).resolves.toEqual(settings);
@@ -65,7 +67,9 @@ describe('createAsyncStorageAdapter (§8)', () => {
 
   it('round-trips scores', async () => {
     const adapter = createAsyncStorageAdapter();
-    const scores: PersistedScores = { bestSolid: 150, bestPortal: 90 };
+    const scores: PersistedScores = {
+      bests: { 'CLASSIC:SOLID': 150, 'DYNAMIC_WALLS:PORTAL': 90 },
+    };
     await adapter.setScores(scores);
     await expect(adapter.getScores()).resolves.toEqual(scores);
     expect(mock.setItem).toHaveBeenCalledWith(
@@ -101,7 +105,7 @@ describe('createAsyncStorageAdapter (§8)', () => {
     );
     mock.__setRaw(
       SCORES_KEY,
-      JSON.stringify({ bestSolid: -5, bestPortal: 3.5 }),
+      JSON.stringify({ bests: { 'CLASSIC:SOLID': -5, 'CLASSIC:PORTAL': 40 } }),
     );
 
     await expect(adapter.getSettings()).resolves.toEqual({
@@ -111,16 +115,17 @@ describe('createAsyncStorageAdapter (§8)', () => {
       hapticsEnabled: false,
       skinId: DEFAULT_SETTINGS.skinId,
       controlScheme: DEFAULT_SETTINGS.controlScheme,
+      modeId: DEFAULT_SETTINGS.modeId,
     });
+    // The invalid entry is dropped; the valid one survives.
     await expect(adapter.getScores()).resolves.toEqual({
-      bestSolid: 0,
-      bestPortal: 0,
+      bests: { 'CLASSIC:PORTAL': 40 },
     });
   });
 
   it('resetScores writes DEFAULT_SCORES', async () => {
     const adapter = createAsyncStorageAdapter();
-    await adapter.setScores({ bestSolid: 99, bestPortal: 42 });
+    await adapter.setScores({ bests: { 'CLASSIC:SOLID': 99 } });
     await adapter.resetScores();
     expect(mock.setItem).toHaveBeenLastCalledWith(
       SCORES_KEY,
@@ -133,5 +138,43 @@ describe('createAsyncStorageAdapter (§8)', () => {
     const adapter = createAsyncStorageAdapter();
     mock.getItem.mockRejectedValueOnce(new Error('disk failure'));
     await expect(adapter.getSettings()).resolves.toEqual(DEFAULT_SETTINGS);
+  });
+
+  describe('scores v1 -> v2 migration (Prompt 40)', () => {
+    it('migrates a legacy v1 blob, persists v2, and returns the migrated record', async () => {
+      const adapter = createAsyncStorageAdapter();
+      mock.__setRaw(
+        SCORES_KEY_V1,
+        JSON.stringify({ bestSolid: 120, bestPortal: 80 }),
+      );
+
+      await expect(adapter.getScores()).resolves.toEqual({
+        bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 80 },
+      });
+      // The migrated v2 record is written back to the v2 key.
+      expect(mock.setItem).toHaveBeenCalledWith(
+        SCORES_KEY,
+        JSON.stringify({ bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 80 } }),
+      );
+    });
+
+    it('reads v2 directly when present (no migration)', async () => {
+      const adapter = createAsyncStorageAdapter();
+      mock.__setRaw(SCORES_KEY_V1, JSON.stringify({ bestSolid: 5, bestPortal: 5 }));
+      mock.__setRaw(
+        SCORES_KEY,
+        JSON.stringify({ bests: { 'DYNAMIC_WALLS:SOLID': 200 } }),
+      );
+
+      await expect(adapter.getScores()).resolves.toEqual({
+        bests: { 'DYNAMIC_WALLS:SOLID': 200 },
+      });
+    });
+
+    it('returns defaults (no throw) when only a corrupt v1 blob exists', async () => {
+      const adapter = createAsyncStorageAdapter();
+      mock.__setRaw(SCORES_KEY_V1, '<<<not json>>>');
+      await expect(adapter.getScores()).resolves.toEqual(DEFAULT_SCORES);
+    });
   });
 });

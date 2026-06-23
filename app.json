@@ -12,7 +12,8 @@
       "expo-router"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kylo.delgado.coil"
     },
     "android": {
       "adaptiveIcon": {

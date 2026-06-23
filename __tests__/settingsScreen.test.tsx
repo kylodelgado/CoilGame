@@ -5,6 +5,7 @@ import { useSettingsStore } from '../src/state/useSettingsStore';
 import { useScoresStore } from '../src/state/useScoresStore';
 import { DEFAULT_SETTINGS } from '../src/services/StoragePort';
 import type { StoragePort } from '../src/services/StoragePort';
+import { SKIN_IDS } from '../src/skins/registry';
 
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
@@ -112,5 +113,36 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
     renderSettings();
     fireEvent.press(screen.getByTestId('back-button'));
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('Skin picker (Prompt 33)', () => {
+    it('shows one option per SKIN_IDS', () => {
+      renderSettings();
+      for (const id of SKIN_IDS) {
+        expect(screen.getByTestId(`skin-option-${id}`)).toBeOnTheScreen();
+      }
+    });
+
+    it('tapping an option calls setSkin and persists that id', () => {
+      renderSettings();
+      fireEvent.press(screen.getByTestId('skin-option-neon'));
+
+      expect(useSettingsStore.getState().skinId).toBe('neon');
+      expect(storage.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ skinId: 'neon' }),
+      );
+    });
+
+    it('reflects the selected skin', () => {
+      renderSettings();
+      fireEvent.press(screen.getByTestId('skin-option-amberCrt'));
+
+      expect(
+        screen.getByTestId('skin-option-amberCrt').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: true }));
+      expect(
+        screen.getByTestId('skin-option-neon').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: false }));
+    });
   });
 });

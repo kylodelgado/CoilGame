@@ -6,7 +6,10 @@ import { createAsyncStorageAdapter } from '../services/asyncStorageAdapter';
 import type { StoragePort } from '../services/StoragePort';
 import { useSettingsStore } from '../state/useSettingsStore';
 import { useScoresStore } from '../state/useScoresStore';
-import { useSkin } from '../skins/SkinProvider';
+import { useSkin, SkinProvider } from '../skins/SkinProvider';
+import { SKIN_IDS, getSkin } from '../skins/registry';
+import { PRESETS } from '../engine/presets';
+import { PresetPreview } from '../render/PresetPreview';
 
 interface SettingsScreenProps {
   /** Inject a StoragePort (tests); defaults to the AsyncStorage adapter. */
@@ -28,8 +31,10 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
 
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
+  const skinId = useSettingsStore((s) => s.skinId);
   const setSound = useSettingsStore((s) => s.setSound);
   const setHaptics = useSettingsStore((s) => s.setHaptics);
+  const setSkin = useSettingsStore((s) => s.setSkin);
   const resetScores = useScoresStore((s) => s.reset);
 
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -67,6 +72,36 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
           value={hapticsEnabled}
           onValueChange={(v) => setHaptics(v)}
         />
+      </View>
+
+      <View style={styles.skinSection}>
+        <Text style={styles.rowLabel}>Skin</Text>
+        <View style={styles.skinGrid}>
+          {SKIN_IDS.map((id) => {
+            const selected = id === skinId;
+            return (
+              <Pressable
+                key={id}
+                testID={`skin-option-${id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Skin ${id}`}
+                accessibilityState={{ selected }}
+                onPress={() => setSkin(id)}
+                style={styles.skinOption}
+              >
+                {/* Force the candidate skin so the swatch previews its colors. */}
+                <SkinProvider skin={getSkin(id)}>
+                  <PresetPreview
+                    preset={PRESETS.CLASSIC}
+                    boxWidth={64}
+                    boxHeight={48}
+                    selected={selected}
+                  />
+                </SkinProvider>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <Pressable
@@ -134,6 +169,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#222',
   },
   rowLabel: { color: '#eee', fontSize: 18 },
+  skinSection: { paddingVertical: 16, gap: 12 },
+  skinGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  skinOption: { borderRadius: 8 },
   resetButton: {
     marginTop: 32,
     paddingVertical: 14,

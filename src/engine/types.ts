@@ -9,6 +9,9 @@ export type WallBehavior = 'SOLID' | 'PORTAL';
 
 export type PresetId = 'CLASSIC' | 'STANDARD' | 'DENSE';
 
+/** The selectable game modes. GPS is added in chunk M. */
+export type ModeId = 'CLASSIC' | 'DYNAMIC_WALLS';
+
 export type GameStatus =
   | 'TAP_TO_START'
   | 'COUNTDOWN'

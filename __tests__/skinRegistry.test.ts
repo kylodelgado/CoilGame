@@ -46,6 +46,14 @@ describe('skin registry', () => {
     }
   });
 
+  it('every skin defines bonusColor and bonusShape (Prompt 35)', () => {
+    for (const id of SKIN_IDS) {
+      const s = SKINS[id];
+      expect(typeof s.bonusColor).toBe('string');
+      expect(['square', 'circle']).toContain(s.bonusShape);
+    }
+  });
+
   it('every color token is a documented hex string', () => {
     const hex = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
     for (const id of SKIN_IDS) {
@@ -55,6 +63,7 @@ describe('skin registry', () => {
       expect(s.snakeHead).toMatch(hex);
       expect(s.snakeBody).toMatch(hex);
       expect(s.foodColor).toMatch(hex);
+      expect(s.bonusColor).toMatch(hex);
     }
   });
 

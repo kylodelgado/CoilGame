@@ -8,15 +8,24 @@ interface DynamicLayerProps {
   gridSpec: GridSpec;
   snake: Cell[];
   food: Cell | null;
+  /** Active bonus pickup, or null/undefined when none is on the board. */
+  bonusFood?: Cell | null;
 }
 
 /**
  * Dynamic layer: the snake (head in skin.snakeHead, body in the dimmer
- * skin.snakeBody so the head reads brighter) and the food, redrawn from the
- * passed state each render. A pure projection of state — it reads the array but
- * never mutates it. All visuals come from the active skin. (EH-12/13)
+ * skin.snakeBody so the head reads brighter), the food, and the bonus pickup
+ * (when present) drawn in skin.bonusColor/bonusShape so it reads distinct from
+ * regular food. Redrawn from the passed state each render. A pure projection of
+ * state — it reads the arrays but never mutates them. All visuals come from the
+ * active skin. (EH-12/13)
  */
-export function DynamicLayer({ gridSpec, snake, food }: DynamicLayerProps) {
+export function DynamicLayer({
+  gridSpec,
+  snake,
+  food,
+  bonusFood = null,
+}: DynamicLayerProps) {
   const skin = useSkin();
   const corner = skin.cellShape === 'rounded' ? gridSpec.cellSize / 4 : 0;
 
@@ -42,6 +51,28 @@ export function DynamicLayer({ gridSpec, snake, food }: DynamicLayerProps) {
       />
     );
 
+  // Draw a pickup (food or bonus) honoring its skin shape token.
+  const pickupNode = (
+    cell: Cell,
+    color: string,
+    shape: 'square' | 'circle',
+    key: string,
+  ) => {
+    const r = cellRect(gridSpec, cell, skin.cellGap);
+    if (shape === 'circle') {
+      return (
+        <Circle
+          key={key}
+          cx={r.x + r.width / 2}
+          cy={r.y + r.height / 2}
+          r={Math.min(r.width, r.height) / 2}
+          color={color}
+        />
+      );
+    }
+    return cellNode(r, color, key);
+  };
+
   return (
     <Canvas style={StyleSheet.absoluteFill}>
       {snake.map((cell, i) =>
@@ -52,20 +83,9 @@ export function DynamicLayer({ gridSpec, snake, food }: DynamicLayerProps) {
         ),
       )}
       {food !== null &&
-        (() => {
-          const r = cellRect(gridSpec, food, skin.cellGap);
-          if (skin.foodShape === 'circle') {
-            return (
-              <Circle
-                cx={r.x + r.width / 2}
-                cy={r.y + r.height / 2}
-                r={Math.min(r.width, r.height) / 2}
-                color={skin.foodColor}
-              />
-            );
-          }
-          return cellNode(r, skin.foodColor, 'food');
-        })()}
+        pickupNode(food, skin.foodColor, skin.foodShape, 'food')}
+      {bonusFood != null &&
+        pickupNode(bonusFood, skin.bonusColor, skin.bonusShape, 'bonus')}
     </Canvas>
   );
 }

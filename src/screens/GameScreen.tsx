@@ -43,6 +43,7 @@ interface Projection {
   status: GameState['status'];
   snake: Cell[];
   food: Cell | null;
+  bonusFood: Cell | null;
   score: number;
 }
 
@@ -50,6 +51,7 @@ const toProjection = (s: GameState): Projection => ({
   status: s.status,
   snake: s.snake,
   food: s.food,
+  bonusFood: s.bonusFood,
   score: s.score,
 });
 
@@ -116,6 +118,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     status: 'TAP_TO_START',
     snake: [],
     food: null,
+    bonusFood: null,
     score: 0,
   }));
 
@@ -192,7 +195,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     [controller],
   );
 
-  const { status, snake, food, score } = projection;
+  const { status, snake, food, bonusFood, score } = projection;
 
   return (
     <View
@@ -218,7 +221,12 @@ export function GameScreen(props: GameScreenProps = {}) {
 
       <View testID="game-board" style={styles.board}>
         <Board gridSpec={grid} />
-        <DynamicLayer gridSpec={grid} snake={snake} food={food} />
+        <DynamicLayer
+          gridSpec={grid}
+          snake={snake}
+          food={food}
+          bonusFood={bonusFood}
+        />
         <SwipeInput onDirection={onSwipe} />
 
         {status === 'TAP_TO_START' && (

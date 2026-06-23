@@ -7,6 +7,13 @@ import {
 } from '../engine';
 import type { Mode } from './Mode';
 
+// Bonus-food tunables for classic play. A bonus appears every
+// BONUS_SPAWN_EVERY_TICKS ticks, lingers BONUS_LIFETIME_TICKS ticks, and is
+// worth BONUS_POINTS (well above a normal food) without growing the snake.
+const BONUS_SPAWN_EVERY_TICKS = 60;
+const BONUS_LIFETIME_TICKS = 25;
+const BONUS_POINTS = 50;
+
 /**
  * The MVP mode. buildConfig folds the chosen preset + wall + computed grid into
  * a GameConfig; createInitialState and tick delegate straight to the engine —
@@ -25,12 +32,11 @@ export const classicMode: Mode = {
       pointsPerFood: POINTS_PER_FOOD,
       startLength: START_LENGTH,
       startDirection: START_DIRECTION,
-      // Bonus is wired up but disabled here; step 35 enables it with tunables.
       bonus: {
-        enabled: false,
-        spawnEveryTicks: 60,
-        lifetimeTicks: 25,
-        points: 50,
+        enabled: true,
+        spawnEveryTicks: BONUS_SPAWN_EVERY_TICKS,
+        lifetimeTicks: BONUS_LIFETIME_TICKS,
+        points: BONUS_POINTS,
       },
     };
   },

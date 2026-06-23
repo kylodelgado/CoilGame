@@ -45,7 +45,7 @@ describe('classicMode (mode seam)', () => {
         startLength: START_LENGTH,
         startDirection: START_DIRECTION,
         bonus: {
-          enabled: false,
+          enabled: true,
           spawnEveryTicks: 60,
           lifetimeTicks: 25,
           points: 50,

@@ -16,4 +16,6 @@ export const amberCrt: Skin = {
   snakeBody: '#A85800',
   foodColor: '#FFCC33',
   foodShape: 'square',
+  bonusColor: '#FFF3C4', // pale amber-white, brighter than the food
+  bonusShape: 'circle',
 };

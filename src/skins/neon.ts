@@ -16,4 +16,6 @@ export const neon: Skin = {
   snakeBody: '#0A8A8A',
   foodColor: '#FF2EC4',
   foodShape: 'circle',
+  bonusColor: '#FFE600', // electric yellow, contrasts the magenta food
+  bonusShape: 'square',
 };

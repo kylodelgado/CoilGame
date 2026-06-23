@@ -17,4 +17,6 @@ export const monoLcd: Skin = {
   snakeBody: '#306230',
   foodColor: '#0F380F',
   foodShape: 'circle',
+  bonusColor: '#306230', // mid green ring, distinct from the darkest-ink food
+  bonusShape: 'square',
 };

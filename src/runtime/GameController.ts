@@ -109,6 +109,15 @@ export function createGameController(deps: GameControllerDeps): GameController {
             }
             sound.play('ATE_FOOD');
             break;
+          case 'ATE_BONUS':
+            // Reuse the eat haptic; sound is out of scope this phase.
+            if (isHapticsEnabled()) {
+              haptics.eat();
+            }
+            break;
+          case 'BONUS_EXPIRED':
+            // No side effect — the bonus simply despawned.
+            break;
           case 'DIED':
             if (isHapticsEnabled()) {
               haptics.death();

@@ -70,6 +70,32 @@ describe('Skia rendering (EH-12/13)', () => {
     ).not.toThrow();
   });
 
+  it('DynamicLayer mounts with a bonusFood cell (Prompt 35)', () => {
+    expect(() =>
+      wrap(
+        <DynamicLayer
+          gridSpec={GRID}
+          snake={makeSnake(3)}
+          food={{ x: 8, y: 8 }}
+          bonusFood={{ x: 2, y: 2 }}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('DynamicLayer mounts with bonusFood === null', () => {
+    expect(() =>
+      wrap(
+        <DynamicLayer
+          gridSpec={GRID}
+          snake={makeSnake(3)}
+          food={{ x: 8, y: 8 }}
+          bonusFood={null}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
   it.each([1, 3, 10, 50])(
     'DynamicLayer renders a snake of length %i without throwing',
     (length) => {

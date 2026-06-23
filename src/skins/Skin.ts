@@ -17,4 +17,7 @@ export interface Skin {
   snakeBody: string;
   foodColor: string;
   foodShape: 'square' | 'circle';
+  /** Bonus pickup color — distinct from foodColor so it reads as special. */
+  bonusColor: string;
+  bonusShape: 'square' | 'circle';
 }

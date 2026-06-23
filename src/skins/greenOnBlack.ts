@@ -17,4 +17,6 @@ export const greenOnBlack: Skin = {
   snakeBody: '#2E8B22',
   foodColor: '#39FF14',
   foodShape: 'square',
+  bonusColor: '#FFD300', // bright golden yellow, pops against the green palette
+  bonusShape: 'circle',
 };

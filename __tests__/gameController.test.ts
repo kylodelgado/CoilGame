@@ -163,6 +163,80 @@ describe('createGameController (runtime glue)', () => {
     expect(off.sound.play).toHaveBeenCalledWith('ATE_FOOD');
   });
 
+  it('ATE_BONUS: fires haptics.eat only when enabled, never plays sound (Prompt 35)', () => {
+    const initial = makeState({
+      snake: [
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+    const bonusResult: TickResult = {
+      state: { ...initial, status: 'RUNNING', score: 50 },
+      events: ['ATE_BONUS'],
+    };
+
+    // Enabled.
+    const on = makeMocks();
+    const c1 = createGameController({
+      mode: scriptedMode(initial, [bonusResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      ...on,
+    });
+    c1.tapToStart();
+    c1.setRunning();
+    c1.step();
+    expect(on.haptics.eat).toHaveBeenCalledTimes(1);
+    expect(on.sound.play).not.toHaveBeenCalled();
+
+    // Disabled.
+    const off = makeMocks();
+    const c2 = createGameController({
+      mode: scriptedMode(initial, [bonusResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => false,
+      isSoundEnabled: () => true,
+      ...off,
+    });
+    c2.tapToStart();
+    c2.setRunning();
+    c2.step();
+    expect(off.haptics.eat).not.toHaveBeenCalled();
+    expect(off.sound.play).not.toHaveBeenCalled();
+  });
+
+  it('BONUS_EXPIRED: triggers no haptic and no sound (Prompt 35)', () => {
+    const initial = makeState({
+      snake: [
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+    const expiredResult: TickResult = {
+      state: { ...initial, status: 'RUNNING' },
+      events: ['BONUS_EXPIRED'],
+    };
+
+    const m = makeMocks();
+    const c = createGameController({
+      mode: scriptedMode(initial, [expiredResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      ...m,
+    });
+    c.tapToStart();
+    c.setRunning();
+    c.step();
+    expect(m.haptics.eat).not.toHaveBeenCalled();
+    expect(m.haptics.death).not.toHaveBeenCalled();
+    expect(m.sound.play).not.toHaveBeenCalled();
+  });
+
   it('reaching LOST records the run once and calls onTerminal with the score', () => {
     const initial = makeState({ snake: [{ x: 2, y: 2 }] });
     const lostResult: TickResult = {

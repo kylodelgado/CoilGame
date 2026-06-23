@@ -34,6 +34,18 @@ export interface GridSpec {
   originY: number;
 }
 
+/**
+ * The play world for GPS mode — a board larger than the on-screen viewport.
+ * Entities (snake/food/bonus/obstacles) live in WORLD coordinates; the camera
+ * (chunk M render) shows a moving window of it. For fixed-board modes this is
+ * absent and the engine operates on GridSpec as before.
+ */
+export interface WorldSpec {
+  worldColumns: number;
+  worldRows: number;
+  cellSize: number;
+}
+
 export interface Preset {
   id: PresetId;
   label: string;
@@ -64,6 +76,12 @@ export interface GameConfig {
   startLength: number;
   startDirection: Direction;
   bonus: BonusConfig;
+  /**
+   * Present only for world-based (GPS) modes. When set, the world helpers run
+   * the engine over a world-sized grid while `grid` stays the on-screen viewport.
+   * Additive and optional, so fixed-board configs are unchanged.
+   */
+  world?: WorldSpec;
 }
 
 export interface GameState {

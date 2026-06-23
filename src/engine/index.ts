@@ -12,3 +12,4 @@ export * from './input';
 export * from './createInitialState';
 export * from './movement';
 export * from './tick';
+export * from './world';

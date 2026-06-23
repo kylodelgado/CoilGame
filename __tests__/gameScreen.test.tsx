@@ -294,4 +294,72 @@ describe('GameScreen integration', () => {
       recordSpy.mockRestore();
     });
   });
+
+  describe('GPS routing (Prompt 50)', () => {
+    const GPS_WORLD = { worldColumns: 60, worldRows: 60, cellSize: 12 };
+
+    // A scripted GPS mode: world-based config + a world-centered initial state.
+    function scriptedGpsMode(
+      results: TickResult[],
+      initial: GameState,
+    ): Mode & { tick: jest.Mock } {
+      let i = 0;
+      const tick = jest.fn(() => results[Math.min(i++, results.length - 1)]);
+      return {
+        id: 'GPS',
+        buildConfig: () => ({ ...CONFIG, world: GPS_WORLD }),
+        createInitialState: () => initial,
+        tick,
+      };
+    }
+
+    it('renders the world/camera + HUD arrow path and records under the GPS key', () => {
+      useSettingsStore.setState({ modeId: 'GPS' });
+      const recordSpy = jest.spyOn(useScoresStore.getState(), 'recordRun');
+      const submit = jest.fn();
+
+      const gpsInitial = baseState({
+        status: 'TAP_TO_START',
+        snake: [
+          { x: 30, y: 30 },
+          { x: 29, y: 30 },
+          { x: 28, y: 30 },
+        ],
+        food: { x: 55, y: 30 }, // far off-screen => HUD arrow visible
+      });
+      const mode = scriptedGpsMode(
+        [
+          {
+            state: baseState({
+              status: 'LOST',
+              score: 70,
+              snake: [{ x: 31, y: 30 }],
+              food: { x: 55, y: 30 },
+            }),
+            events: ['DIED'],
+          },
+        ],
+        gpsInitial,
+      );
+
+      render(
+        <SkinProvider>
+          <GameScreen mode={mode} submitter={{ submit }} />
+        </SkinProvider>,
+      );
+
+      // The GPS HUD arrow proves the world/camera render path is active.
+      expect(screen.getByTestId('gps-arrow')).toBeOnTheScreen();
+
+      startRunning();
+      advance(100); // one tick -> terminal LOST
+
+      expect(recordSpy).toHaveBeenCalledWith('GPS', 'SOLID', expect.any(Number));
+      expect(submit).toHaveBeenCalledWith({ modeId: 'GPS', wall: 'SOLID' }, 70);
+      const nav = mockReplace.mock.calls[0][0];
+      expect(nav.params.modeId).toBe('GPS');
+
+      recordSpy.mockRestore();
+    });
+  });
 });

@@ -45,7 +45,7 @@ export const SCORES_KEY = 'coil.scores.v2';
 const PRESET_IDS: readonly PresetId[] = ['CLASSIC', 'STANDARD', 'DENSE'];
 const WALL_BEHAVIORS: readonly WallBehavior[] = ['SOLID', 'PORTAL'];
 const CONTROL_SCHEMES: readonly ControlScheme[] = ['SWIPE', 'DPAD'];
-const MODE_IDS: readonly ModeId[] = ['CLASSIC', 'DYNAMIC_WALLS'];
+const MODE_IDS: readonly ModeId[] = ['CLASSIC', 'DYNAMIC_WALLS', 'GPS'];
 
 /** Narrow to a plain (non-null, non-array) object for safe property access. */
 function isRecord(value: unknown): value is Record<string, unknown> {

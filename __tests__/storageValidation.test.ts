@@ -155,16 +155,18 @@ describe('validateSettings (EH-1, §8.5)', () => {
     });
 
     it('falls back to CLASSIC for an unknown modeId', () => {
-      const result = validateSettings({ ...DEFAULT_SETTINGS, modeId: 'GPS' });
+      const result = validateSettings({ ...DEFAULT_SETTINGS, modeId: 'BATTLE' });
       expect(result.modeId).toBe('CLASSIC');
     });
 
-    it('passes a valid modeId through', () => {
-      const result = validateSettings({
-        ...DEFAULT_SETTINGS,
-        modeId: 'DYNAMIC_WALLS',
-      });
-      expect(result.modeId).toBe('DYNAMIC_WALLS');
+    it('passes valid modeIds through (incl. GPS)', () => {
+      expect(
+        validateSettings({ ...DEFAULT_SETTINGS, modeId: 'DYNAMIC_WALLS' })
+          .modeId,
+      ).toBe('DYNAMIC_WALLS');
+      expect(
+        validateSettings({ ...DEFAULT_SETTINGS, modeId: 'GPS' }).modeId,
+      ).toBe('GPS');
     });
   });
 });

@@ -30,6 +30,10 @@ import { useAppStatePause } from '../runtime/useAppStatePause';
 import { useCountdown } from '../runtime/useCountdown';
 import { Board } from '../render/Board';
 import { DynamicLayer } from '../render/DynamicLayer';
+import { WorldBoard } from '../render/WorldBoard';
+import { WorldDynamicLayer } from '../render/WorldDynamicLayer';
+import { GpsArrow } from '../render/GpsArrow';
+import { computeViewport } from '../render/camera';
 import { SwipeInput } from '../input/SwipeInput';
 import { DpadInput } from '../input/DpadInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
@@ -116,7 +120,9 @@ export function GameScreen(props: GameScreenProps = {}) {
       ? params.wall
       : storeWall;
   const modeId: ModeId =
-    params.modeId === 'CLASSIC' || params.modeId === 'DYNAMIC_WALLS'
+    params.modeId === 'CLASSIC' ||
+    params.modeId === 'DYNAMIC_WALLS' ||
+    params.modeId === 'GPS'
       ? params.modeId
       : storeMode;
 
@@ -246,6 +252,15 @@ export function GameScreen(props: GameScreenProps = {}) {
 
   const { status, snake, food, bonusFood, obstacles, score } = projection;
 
+  // GPS render path: a camera window of the world that follows the snake's head.
+  const world = config.world;
+  const gridOrigin = { x: grid.originX, y: grid.originY };
+  const head = snake[0] ?? { x: 0, y: 0 };
+  const viewport =
+    world !== undefined
+      ? computeViewport(head, world, grid.columns, grid.rows)
+      : null;
+
   return (
     <View
       style={[
@@ -269,14 +284,36 @@ export function GameScreen(props: GameScreenProps = {}) {
       </View>
 
       <View testID="game-board" style={styles.board}>
-        <Board gridSpec={grid} />
-        <DynamicLayer
-          gridSpec={grid}
-          snake={snake}
-          food={food}
-          bonusFood={bonusFood}
-          obstacles={obstacles}
-        />
+        {viewport !== null && world !== undefined ? (
+          <>
+            <WorldBoard
+              viewport={viewport}
+              cellSize={world.cellSize}
+              gridOrigin={gridOrigin}
+            />
+            <WorldDynamicLayer
+              viewport={viewport}
+              cellSize={world.cellSize}
+              gridOrigin={gridOrigin}
+              snake={snake}
+              food={food}
+              bonusFood={bonusFood}
+              obstacles={obstacles}
+            />
+            <GpsArrow head={head} food={food} viewport={viewport} />
+          </>
+        ) : (
+          <>
+            <Board gridSpec={grid} />
+            <DynamicLayer
+              gridSpec={grid}
+              snake={snake}
+              food={food}
+              bonusFood={bonusFood}
+              obstacles={obstacles}
+            />
+          </>
+        )}
         {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
 
         {status === 'TAP_TO_START' && (

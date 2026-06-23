@@ -12,6 +12,7 @@ const WALLS: WallBehavior[] = ['SOLID', 'PORTAL'];
 const MODE_OPTIONS: ReadonlyArray<readonly [ModeId, string]> = [
   ['CLASSIC', 'Classic'],
   ['DYNAMIC_WALLS', 'Dynamic Walls'],
+  ['GPS', 'GPS'],
 ];
 const PREVIEW_W = 100;
 const PREVIEW_H = 130;

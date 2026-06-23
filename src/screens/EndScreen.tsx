@@ -49,7 +49,11 @@ export function EndScreen({ variant }: EndScreenProps) {
       ? (params.presetId as PresetId)
       : 'STANDARD';
   const modeId: ModeId =
-    params.modeId === 'DYNAMIC_WALLS' ? 'DYNAMIC_WALLS' : 'CLASSIC';
+    params.modeId === 'GPS'
+      ? 'GPS'
+      : params.modeId === 'DYNAMIC_WALLS'
+        ? 'DYNAMIC_WALLS'
+        : 'CLASSIC';
 
   // Subscribe to the bests record so the shown high score is reactive.
   const bests = useScoresStore((s) => s.bests);

@@ -19,6 +19,7 @@ const TOP_N = 20;
 const MODES: ReadonlyArray<readonly [ModeId, string]> = [
   ['CLASSIC', 'Classic'],
   ['DYNAMIC_WALLS', 'Dynamic Walls'],
+  ['GPS', 'GPS'],
 ];
 const WALLS: ReadonlyArray<readonly [WallBehavior, string]> = [
   ['SOLID', 'Solid'],

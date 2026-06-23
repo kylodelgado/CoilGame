@@ -1,0 +1,49 @@
+# Maestro smoke flow for Coil: home -> play -> die -> play again -> home.
+# Run with: maestro test .maestro/smoke.yaml
+# Requires a dev/standalone build installed on a device/emulator.
+appId: com.coil.app
+---
+- launchApp:
+    clearState: true
+
+# Home: pick a preset (selection only) and launch.
+- assertVisible: "Coil"
+- tapOn:
+    id: "preset-CLASSIC"
+- tapOn:
+    id: "play-button"
+
+# Game: dismiss tap-to-start, let the 3s countdown elapse, then play.
+- tapOn:
+    id: "tap-to-start-overlay"
+- assertVisible:
+    id: "countdown-overlay"
+- extendedWaitUntil:
+    visible:
+      id: "score-hud"
+    timeout: 5000
+
+# Drive into a wall (Classic = SOLID) to reach a loss, then verify the loss UI.
+# (Swipes are best-effort; the run ends on a collision and routes to /loss.)
+- swipe:
+    direction: UP
+- extendedWaitUntil:
+    visible:
+      id: "play-again-button"
+    timeout: 15000
+
+# Play Again returns to a fresh game with the same settings.
+- tapOn:
+    id: "play-again-button"
+- assertVisible:
+    id: "tap-to-start-overlay"
+
+# Back out to Home.
+- tapOn:
+    id: "tap-to-start-overlay"
+- back
+- assertVisible:
+    id: "pause-overlay"
+- tapOn:
+    id: "quit-button"
+- assertVisible: "Coil"

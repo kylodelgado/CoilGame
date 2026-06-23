@@ -14,8 +14,9 @@ import {
  * to subscribers. The gesture object is returned for attachment; subscribe is
  * the InputSource seam (a D-pad can implement the same contract in Phase 2).
  *
- * RNGH runs these callbacks on the JS thread (no worklets here), so listeners
- * are notified directly.
+ * With Reanimated installed, RNGH runs gesture callbacks as UI-thread worklets
+ * by default. We force them back onto the JS thread with .runOnJS(true) so the
+ * plain translationToDirection helper and the JS listener Set work directly.
  */
 export function useSwipeInput(
   threshold: number = SWIPE_THRESHOLD_PX,
@@ -24,7 +25,7 @@ export function useSwipeInput(
 
   const gesture = useMemo(
     () =>
-      Gesture.Pan().onEnd((e) => {
+      Gesture.Pan().runOnJS(true).onEnd((e) => {
         const dir = translationToDirection(
           e.translationX,
           e.translationY,

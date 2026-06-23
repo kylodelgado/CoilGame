@@ -42,14 +42,24 @@ export function HomeScreen() {
     <View style={[styles.container, { backgroundColor: skin.background }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: skin.snakeHead }]}>Coil</Text>
-        <Pressable
-          testID="settings-button"
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          onPress={() => router.push('/settings')}
-        >
-          <Text style={[styles.gear, { color: skin.snakeBody }]}>⚙</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            testID="leaderboard-button"
+            accessibilityRole="button"
+            accessibilityLabel="Leaderboard"
+            onPress={() => router.push('/leaderboard')}
+          >
+            <Text style={[styles.gear, { color: skin.snakeBody }]}>🏆</Text>
+          </Pressable>
+          <Pressable
+            testID="settings-button"
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            onPress={() => router.push('/settings')}
+          >
+            <Text style={[styles.gear, { color: skin.snakeBody }]}>⚙</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.scores}>
@@ -195,6 +205,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: { fontSize: 48, fontWeight: '800', letterSpacing: 4 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   gear: { fontSize: 28 },
   scores: {
     flexDirection: 'row',

@@ -138,4 +138,10 @@ describe('HomeScreen selection flow (FR-UI1/UI2)', () => {
     fireEvent.press(screen.getByTestId('settings-button'));
     expect(mockPush).toHaveBeenCalledWith('/settings');
   });
+
+  it('the trophy navigates to /leaderboard (Prompt 46)', () => {
+    renderHome();
+    fireEvent.press(screen.getByTestId('leaderboard-button'));
+    expect(mockPush).toHaveBeenCalledWith('/leaderboard');
+  });
 });

@@ -86,6 +86,53 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
     expect(screen.getByText(/perfect/i)).toBeOnTheScreen();
   });
 
+  it('renders extended stats (length, food, time) alongside score and high score (Prompt 37)', () => {
+    mockParams = {
+      score: '120',
+      isNewBest: '0',
+      foodEaten: '12',
+      length: '15',
+      elapsedMs: '75200', // 1:15
+      presetId: 'STANDARD',
+      wall: 'SOLID',
+    };
+    useScoresStore.setState({ bestSolid: 200, bestPortal: 5, hydrated: true });
+    wrap(<WinScreen />);
+
+    // Primary figures still present.
+    expect(screen.getByTestId('final-score')).toHaveTextContent('120');
+    expect(screen.getByTestId('high-score')).toHaveTextContent('200');
+    // Secondary run stats.
+    expect(screen.getByTestId('stat-length')).toHaveTextContent('15');
+    expect(screen.getByTestId('stat-food')).toHaveTextContent('12');
+    expect(screen.getByTestId('stat-time')).toHaveTextContent('1:15');
+  });
+
+  it('formats a sub-minute time and defaults missing stats to zero', () => {
+    mockParams = {
+      score: '30',
+      isNewBest: '0',
+      foodEaten: '3',
+      length: '6',
+      elapsedMs: '9000', // 0:09
+      presetId: 'CLASSIC',
+      wall: 'SOLID',
+    };
+    const { rerender } = wrap(<LossScreen />);
+    expect(screen.getByTestId('stat-time')).toHaveTextContent('0:09');
+
+    // Missing stats default to zeros without crashing.
+    mockParams = { score: '0', isNewBest: '0', presetId: 'CLASSIC', wall: 'SOLID' };
+    rerender(
+      <SkinProvider>
+        <LossScreen />
+      </SkinProvider>,
+    );
+    expect(screen.getByTestId('stat-time')).toHaveTextContent('0:00');
+    expect(screen.getByTestId('stat-length')).toHaveTextContent('0');
+    expect(screen.getByTestId('stat-food')).toHaveTextContent('0');
+  });
+
   it('LossScreen shows the Portal best for a Portal run and no New Best when not beaten', () => {
     mockParams = {
       score: '50',

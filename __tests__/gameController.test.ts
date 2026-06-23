@@ -264,7 +264,13 @@ describe('createGameController (runtime glue)', () => {
     expect(m.recordRun).toHaveBeenCalledTimes(1);
     expect(m.recordRun).toHaveBeenCalledWith('SOLID', 70);
     expect(m.onTerminal).toHaveBeenCalledTimes(1);
-    expect(m.onTerminal).toHaveBeenCalledWith(controller.getState(), true);
+    expect(m.onTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: controller.getState(),
+        score: 70,
+        isNewBest: true,
+      }),
+    );
   });
 
   it('reaching WON records the run once and plays the win sound', () => {
@@ -291,7 +297,64 @@ describe('createGameController (runtime glue)', () => {
     expect(m.sound.play).toHaveBeenCalledWith('WON');
     expect(m.recordRun).toHaveBeenCalledTimes(1);
     expect(m.recordRun).toHaveBeenCalledWith('PORTAL', 360);
-    expect(m.onTerminal).toHaveBeenCalledWith(controller.getState(), true);
+    expect(m.onTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ state: controller.getState(), isNewBest: true }),
+    );
+  });
+
+  it('terminal payload carries foodEaten, length, and elapsedMs excluding paused time (Prompt 37)', () => {
+    let now = 1000;
+    const clock = () => now;
+    const initial = makeState({
+      snake: [
+        { x: 3, y: 2 },
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+    const lostResult: TickResult = {
+      state: {
+        ...initial,
+        status: 'LOST',
+        score: 40,
+        foodEaten: 4,
+        snake: [
+          { x: 4, y: 2 },
+          { x: 3, y: 2 },
+          { x: 2, y: 2 },
+          { x: 1, y: 2 },
+        ],
+      },
+      events: ['DIED'],
+    };
+    const m = makeMocks();
+    const controller = createGameController({
+      mode: scriptedMode(initial, [lostResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      clock,
+      ...m,
+    });
+
+    controller.tapToStart();
+    now = 1100;
+    controller.setRunning(); // run clock starts at 1100
+    now = 1200; // 100ms running
+    controller.pause(); // accumulate 100, clock stops
+    now = 5000; // 3800ms paused — must be excluded
+    controller.resume(); // -> COUNTDOWN (not counted)
+    now = 5100;
+    controller.setRunning(); // run clock restarts at 5100
+    now = 5150; // 50ms running
+    controller.step(); // terminal -> accumulate +50
+
+    const payload = m.onTerminal.mock.calls[0][0];
+    expect(payload.elapsedMs).toBe(150); // 100 + 50, paused 3800 excluded
+    expect(payload.foodEaten).toBe(4);
+    expect(payload.length).toBe(4);
+    expect(payload.score).toBe(40);
   });
 
   it('quit() does not record the run even mid-game (FR-P6)', () => {

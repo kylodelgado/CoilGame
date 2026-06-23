@@ -20,7 +20,10 @@ import type {
 } from '../engine/types';
 import { classicMode } from '../modes/classicMode';
 import type { Mode } from '../modes/Mode';
-import { createGameController } from '../runtime/GameController';
+import {
+  createGameController,
+  type TerminalPayload,
+} from '../runtime/GameController';
 import { useGameLoop } from '../runtime/useGameLoop';
 import { useAppStatePause } from '../runtime/useAppStatePause';
 import { useCountdown } from '../runtime/useCountdown';
@@ -125,12 +128,16 @@ export function GameScreen(props: GameScreenProps = {}) {
   }));
 
   const onTerminal = useCallback(
-    (state: GameState, isNewBest: boolean) => {
+    (payload: TerminalPayload) => {
+      const { state, score, isNewBest, foodEaten, length, elapsedMs } = payload;
       routerRef.current.replace({
         pathname: state.status === 'WON' ? '/win' : '/loss',
         params: {
-          score: String(state.score),
+          score: String(score),
           isNewBest: isNewBest ? '1' : '0',
+          foodEaten: String(foodEaten),
+          length: String(length),
+          elapsedMs: String(elapsedMs),
           presetId,
           wall,
         },

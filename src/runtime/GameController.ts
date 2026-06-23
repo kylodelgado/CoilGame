@@ -10,6 +10,20 @@ import type { HapticsPort } from '../services/HapticsPort';
 import type { RandomPort } from '../services/RandomPort';
 import type { SoundPort } from '../services/SoundPort';
 
+/**
+ * The end-of-run payload handed to onTerminal. Beyond score/isNewBest it carries
+ * the extended stats shown on the Win/Loss screens: snake length, food eaten,
+ * and time survived (only the RUNNING portion, paused time excluded). (Prompt 37)
+ */
+export interface TerminalPayload {
+  state: GameState;
+  score: number;
+  isNewBest: boolean;
+  foodEaten: number;
+  length: number;
+  elapsedMs: number;
+}
+
 export interface GameControllerDeps {
   mode: Mode;
   config: GameConfig;
@@ -20,12 +34,17 @@ export interface GameControllerDeps {
   isHapticsEnabled: () => boolean;
   /** Reads the live settings store. Reserved for Phase 2 SFX gating. */
   isSoundEnabled: () => boolean;
+  /**
+   * Monotonic clock (ms) for run-time tracking. Injected so tests are
+   * deterministic; defaults to Date.now in production.
+   */
+  clock?: () => number;
   /** Scores store entry point; called on a completed run only. */
   recordRun: (wall: WallBehavior, score: number) => { isNewBest: boolean };
   /** Notify the renderer/UI of a new authoritative state. */
   onState: (state: GameState) => void;
   /** WON or LOST reached this step. */
-  onTerminal: (state: GameState, isNewBest: boolean) => void;
+  onTerminal: (payload: TerminalPayload) => void;
 }
 
 export interface GameController {
@@ -55,6 +74,7 @@ export function createGameController(deps: GameControllerDeps): GameController {
     haptics,
     sound,
     isHapticsEnabled,
+    clock = Date.now,
     recordRun,
     onState,
     onTerminal,
@@ -64,12 +84,30 @@ export function createGameController(deps: GameControllerDeps): GameController {
   let state: GameState = mode.createInitialState(config, rng);
   let forfeited = false;
 
-  const transition = (status: GameState['status'], from: GameState['status']) => {
+  // Run-time tracking: accumulate only the RUNNING segments. runStartedAt is the
+  // clock reading at the last RUNNING entry, or null while not running.
+  let accumulatedMs = 0;
+  let runStartedAt: number | null = null;
+
+  // Fold the segment ending now into the accumulator (called on pause/terminal).
+  const closeRunSegment = (): void => {
+    if (runStartedAt !== null) {
+      accumulatedMs += clock() - runStartedAt;
+      runStartedAt = null;
+    }
+  };
+
+  // Returns whether the transition fired, so callers can hook the time tracker.
+  const transition = (
+    status: GameState['status'],
+    from: GameState['status'],
+  ): boolean => {
     if (state.status !== from) {
-      return;
+      return false;
     }
     state = { ...state, status };
     onState(state);
+    return true;
   };
 
   return {
@@ -82,7 +120,10 @@ export function createGameController(deps: GameControllerDeps): GameController {
     },
 
     setRunning(): void {
-      transition('RUNNING', 'COUNTDOWN');
+      // Each RUNNING entry (initial start and every resume) restarts the clock.
+      if (transition('RUNNING', 'COUNTDOWN')) {
+        runStartedAt = clock();
+      }
     },
 
     enqueue(dir: Direction): void {
@@ -131,13 +172,24 @@ export function createGameController(deps: GameControllerDeps): GameController {
       }
 
       if (state.status === 'WON' || state.status === 'LOST') {
+        closeRunSegment();
         const { isNewBest } = recordRun(config.wallBehavior, state.score);
-        onTerminal(state, isNewBest);
+        onTerminal({
+          state,
+          score: state.score,
+          isNewBest,
+          foodEaten: state.foodEaten,
+          length: state.snake.length,
+          elapsedMs: accumulatedMs,
+        });
       }
     },
 
     pause(): void {
-      transition('PAUSED', 'RUNNING');
+      // Stop the run clock while paused so paused time is excluded.
+      if (transition('PAUSED', 'RUNNING')) {
+        closeRunSegment();
+      }
     },
 
     resume(): void {
@@ -146,6 +198,8 @@ export function createGameController(deps: GameControllerDeps): GameController {
 
     restart(): void {
       forfeited = false;
+      accumulatedMs = 0;
+      runStartedAt = null;
       state = mode.createInitialState(config, rng);
       onState(state);
     },

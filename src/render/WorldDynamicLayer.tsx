@@ -2,15 +2,20 @@ import { StyleSheet } from 'react-native';
 import {
   Canvas,
   Circle,
+  Group,
   Rect,
   RoundedRect,
 } from '@shopify/react-native-skia';
-import type { Cell } from '../engine/types';
+import type { Cell, WorldSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
-import { worldToScreen, type Viewport } from './camera';
+import { AnimatedSnake } from './AnimatedSnake';
+import type { Viewport } from './camera';
+import { useGpsCamera } from './useGpsCamera';
+import { useSnakeGlide } from './useSnakeGlide';
 
 interface WorldDynamicLayerProps {
   viewport: Viewport;
+  world: WorldSpec;
   cellSize: number;
   gridOrigin: { x: number; y: number };
   /** All actor positions in WORLD coordinates. */
@@ -18,77 +23,150 @@ interface WorldDynamicLayerProps {
   food: Cell | null;
   bonusFood?: Cell | null;
   obstacles?: Cell[];
+  /** Current tick interval (ms); the snake/camera sub-tick glide duration. */
+  tickMs?: number;
 }
 
 /**
- * Dynamic layer for GPS mode: the snake, food, bonus, and obstacles drawn at
- * their WORLD positions translated into the viewport via worldToScreen. Entities
- * outside the visible window are skipped entirely (the HUD arrow handles
- * off-screen food). A pure projection reading only the active skin. (chunk M)
+ * The GPS scene: the world grid, obstacles, food/bonus, and the gliding snake,
+ * all drawn at ABSOLUTE world-pixel coordinates inside one camera <Group> whose
+ * translate is the smooth, head-following pan (useGpsCamera). Because grid and
+ * actors share that single transform they pan together in lockstep, so the world
+ * slides smoothly beneath a centered head instead of snapping each tick. The
+ * grid is drawn one cell beyond the viewport on each side (overscan) so no edge
+ * is exposed mid-pan; cost stays bounded by the viewport, not the world. The
+ * background fill is the separate WorldBoard layer beneath this. (smooth GPS)
  */
 export function WorldDynamicLayer({
   viewport,
+  world,
   cellSize,
   gridOrigin,
   snake,
   food,
   bonusFood = null,
   obstacles = [],
+  tickMs = 150,
 }: WorldDynamicLayerProps) {
   const skin = useSkin();
+  const glide = useSnakeGlide(snake, tickMs);
+  const camera = useGpsCamera(glide, viewport, world, cellSize);
+
   const corner = skin.cellShape === 'rounded' ? cellSize / 4 : 0;
   const inset = skin.cellGap / 2;
   const size = cellSize - skin.cellGap;
 
-  // Draw a filled cell at a world position, or nothing when off-screen.
-  const cellNode = (cell: Cell, color: string, key: string) => {
-    const p = worldToScreen(cell, viewport, cellSize, gridOrigin);
-    if (!p.onScreen) {
-      return null;
-    }
-    const x = p.x + inset;
-    const y = p.y + inset;
-    return skin.cellShape === 'rounded' ? (
-      <RoundedRect key={key} x={x} y={y} width={size} height={size} r={corner} color={color} />
-    ) : (
-      <Rect key={key} x={x} y={y} width={size} height={size} color={color} />
-    );
-  };
+  // Absolute world-pixel position of a cell's top-left (camera applies the pan).
+  const px = (worldCol: number) => gridOrigin.x + worldCol * cellSize + inset;
+  const py = (worldRow: number) => gridOrigin.y + worldRow * cellSize + inset;
 
-  // Draw a pickup honoring its skin shape, or nothing when off-screen.
-  const pickupNode = (
+  // Is a world cell within the (slightly padded) visible window? Static actors
+  // outside it are skipped so a large world stays cheap.
+  const inWindow = (cell: Cell): boolean =>
+    cell.x >= viewport.originCol - 1 &&
+    cell.x <= viewport.originCol + viewport.cols + 1 &&
+    cell.y >= viewport.originRow - 1 &&
+    cell.y <= viewport.originRow + viewport.rows + 1;
+
+  const filledCell = (cell: Cell, color: string, key: string) =>
+    skin.cellShape === 'rounded' ? (
+      <RoundedRect
+        key={key}
+        x={px(cell.x)}
+        y={py(cell.y)}
+        width={size}
+        height={size}
+        r={corner}
+        color={color}
+      />
+    ) : (
+      <Rect key={key} x={px(cell.x)} y={py(cell.y)} width={size} height={size} color={color} />
+    );
+
+  const pickup = (
     cell: Cell,
     color: string,
     shape: 'square' | 'circle',
     key: string,
   ) => {
-    const p = worldToScreen(cell, viewport, cellSize, gridOrigin);
-    if (!p.onScreen) {
-      return null;
-    }
     if (shape === 'circle') {
       return (
         <Circle
           key={key}
-          cx={p.x + cellSize / 2}
-          cy={p.y + cellSize / 2}
+          cx={gridOrigin.x + cell.x * cellSize + cellSize / 2}
+          cy={gridOrigin.y + cell.y * cellSize + cellSize / 2}
           r={size / 2}
           color={color}
         />
       );
     }
-    return cellNode(cell, color, key);
+    return filledCell(cell, color, key);
   };
+
+  // Overscanned grid lines: world cells spanning [origin-1, origin+extent+1],
+  // clamped to world bounds, so a sub-cell pan never reveals an undrawn edge.
+  const gridCells: React.ReactNode[] = [];
+  if (skin.gridLine !== null) {
+    const colStart = Math.max(0, viewport.originCol - 1);
+    const colEnd = Math.min(world.worldColumns - 1, viewport.originCol + viewport.cols + 1);
+    const rowStart = Math.max(0, viewport.originRow - 1);
+    const rowEnd = Math.min(world.worldRows - 1, viewport.originRow + viewport.rows + 1);
+    for (let row = rowStart; row <= rowEnd; row++) {
+      for (let col = colStart; col <= colEnd; col++) {
+        const key = `g${col},${row}`;
+        gridCells.push(
+          skin.cellShape === 'rounded' ? (
+            <RoundedRect
+              key={key}
+              x={px(col)}
+              y={py(row)}
+              width={size}
+              height={size}
+              r={corner}
+              color={skin.gridLine}
+              style="stroke"
+              strokeWidth={1}
+            />
+          ) : (
+            <Rect
+              key={key}
+              x={px(col)}
+              y={py(row)}
+              width={size}
+              height={size}
+              color={skin.gridLine}
+              style="stroke"
+              strokeWidth={1}
+            />
+          ),
+        );
+      }
+    }
+  }
 
   return (
     <Canvas style={StyleSheet.absoluteFill}>
-      {obstacles.map((cell, i) => cellNode(cell, skin.obstacleColor, `o${i}`))}
-      {snake.map((cell, i) =>
-        cellNode(cell, i === 0 ? skin.snakeHead : skin.snakeBody, `s${i}`),
-      )}
-      {food !== null && pickupNode(food, skin.foodColor, skin.foodShape, 'food')}
-      {bonusFood != null &&
-        pickupNode(bonusFood, skin.bonusColor, skin.bonusShape, 'bonus')}
+      <Group transform={camera}>
+        {gridCells}
+        {obstacles
+          .filter(inWindow)
+          .map((cell, i) => filledCell(cell, skin.obstacleColor, `o${i}`))}
+        {food !== null &&
+          inWindow(food) &&
+          pickup(food, skin.foodColor, skin.foodShape, 'food')}
+        {bonusFood != null &&
+          inWindow(bonusFood) &&
+          pickup(bonusFood, skin.bonusColor, skin.bonusShape, 'bonus')}
+        <AnimatedSnake
+          glide={glide}
+          cellSize={cellSize}
+          origin={gridOrigin}
+          gap={skin.cellGap}
+          rounded={skin.cellShape === 'rounded'}
+          headColor={skin.snakeHead}
+          bodyColor={skin.snakeBody}
+        />
+      </Group>
     </Canvas>
   );
 }

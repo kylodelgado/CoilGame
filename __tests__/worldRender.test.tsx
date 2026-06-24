@@ -5,22 +5,8 @@ import { SkinProvider } from '../src/skins/SkinProvider';
 import { computeViewport } from '../src/render/camera';
 import type { Cell, WorldSpec } from '../src/engine/types';
 
-jest.mock('@shopify/react-native-skia', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const passthrough =
-    () =>
-    ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, null, children ?? null);
-  return {
-    Canvas: passthrough(),
-    Group: passthrough(),
-    Fill: passthrough(),
-    Rect: passthrough(),
-    RoundedRect: passthrough(),
-    Circle: passthrough(),
-  };
-});
+// Skia + Reanimated are stubbed globally in jest.setup.js, including the
+// imperative path factory and worklet hooks the smooth GPS scene uses.
 
 const WORLD: WorldSpec = { worldColumns: 40, worldRows: 40, cellSize: 12 };
 const viewport = computeViewport({ x: 20, y: 20 }, WORLD, 12, 12);
@@ -48,6 +34,7 @@ describe('GPS world rendering', () => {
       wrap(
         <WorldDynamicLayer
           viewport={viewport}
+          world={WORLD}
           cellSize={WORLD.cellSize}
           gridOrigin={origin}
           snake={snake}
@@ -64,6 +51,7 @@ describe('GPS world rendering', () => {
       wrap(
         <WorldDynamicLayer
           viewport={viewport}
+          world={WORLD}
           cellSize={WORLD.cellSize}
           gridOrigin={origin}
           snake={[{ x: 0, y: 0 }]}
@@ -80,6 +68,7 @@ describe('GPS world rendering', () => {
       wrap(
         <WorldDynamicLayer
           viewport={viewport}
+          world={WORLD}
           cellSize={WORLD.cellSize}
           gridOrigin={origin}
           snake={[{ x: 20, y: 20 }]}

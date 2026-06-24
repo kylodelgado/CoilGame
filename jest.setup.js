@@ -39,7 +39,9 @@ jest.mock('expo-haptics', () => ({
 }));
 
 // Skia's canvas needs native/CanvasKit; stand the declarative components in with
-// plain Views so any component tree that renders them mounts under jest.
+// plain Views so any component tree that renders them mounts under jest. The
+// imperative bits the smooth-snake renderer uses (useClock, the Skia path
+// factory) are stubbed with inert no-ops so worklets build without CanvasKit.
 jest.mock('@shopify/react-native-skia', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -47,6 +49,12 @@ jest.mock('@shopify/react-native-skia', () => {
     () =>
     ({ children }) =>
       React.createElement(View, null, children ?? null);
+  const fakePath = {
+    addRRect: () => fakePath,
+    addRect: () => fakePath,
+    reset: () => fakePath,
+    rewind: () => fakePath,
+  };
   return {
     Canvas: passthrough(),
     Group: passthrough(),
@@ -56,5 +64,23 @@ jest.mock('@shopify/react-native-skia', () => {
     Circle: passthrough(),
     Path: passthrough(),
     Line: passthrough(),
+    useClock: () => ({ value: 0 }),
+    Skia: {
+      Path: { Make: () => fakePath },
+      XYWHRect: (x, y, width, height) => ({ x, y, width, height }),
+      RRectXY: (rect) => rect,
+    },
   };
 });
+
+// Reanimated's index pulls in react-native-worklets' native module, which
+// throws under jest. Swap in Reanimated's own built jest mock (pure JS, no
+// native): it covers the worklet hooks the smooth-snake renderer uses
+// (useSharedValue/useDerivedValue) AND the one gesture-handler needs
+// (useEvent), so both render paths mount. The published
+// `react-native-reanimated/mock` entry points at an unbuilt source file in this
+// version, hence the explicit lib path.
+jest.mock('react-native-reanimated', () =>
+  require('react-native-reanimated/lib/module/mock'),
+);
+

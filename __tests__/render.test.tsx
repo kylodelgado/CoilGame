@@ -4,24 +4,9 @@ import { DynamicLayer } from '../src/render/DynamicLayer';
 import { SkinProvider } from '../src/skins/SkinProvider';
 import type { Cell, GridSpec } from '../src/engine/types';
 
-// Skia's canvas needs native/CanvasKit; for mount tests we stand the
-// declarative components in with plain Views so the tree renders.
-jest.mock('@shopify/react-native-skia', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const passthrough =
-    () =>
-    ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, null, children ?? null);
-  return {
-    Canvas: passthrough(),
-    Group: passthrough(),
-    Fill: passthrough(),
-    Rect: passthrough(),
-    RoundedRect: passthrough(),
-    Circle: passthrough(),
-  };
-});
+// Skia + Reanimated are stubbed globally in jest.setup.js (plain Views plus
+// inert useClock/Skia/worklet hooks) so these mount-only trees render without
+// CanvasKit — no per-file mock needed.
 
 const GRID: GridSpec = {
   columns: 16,

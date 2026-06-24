@@ -2,16 +2,22 @@ import { StyleSheet } from 'react-native';
 import { Canvas, Circle, Rect, RoundedRect } from '@shopify/react-native-skia';
 import type { Cell, GridSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
+import { AnimatedSnake } from './AnimatedSnake';
+import { useSnakeGlide } from './useSnakeGlide';
 import { cellRect, type PixelRect } from './geometry';
 
 interface DynamicLayerProps {
   gridSpec: GridSpec;
   snake: Cell[];
   food: Cell | null;
+  /** Current tick interval (ms); the snake's sub-tick glide duration. */
+  tickMs?: number;
   /** Active bonus pickup, or null/undefined when none is on the board. */
   bonusFood?: Cell | null;
   /** Dynamic-walls obstacle cells; empty/undefined for modes without them. */
   obstacles?: Cell[];
+  /** Bump to snap the snake (no glide) after a restart/reset. */
+  resetKey?: number | string;
 }
 
 /**
@@ -26,10 +32,13 @@ export function DynamicLayer({
   gridSpec,
   snake,
   food,
+  tickMs = 150,
   bonusFood = null,
   obstacles = [],
+  resetKey,
 }: DynamicLayerProps) {
   const skin = useSkin();
+  const glide = useSnakeGlide(snake, tickMs, resetKey);
   const corner = skin.cellShape === 'rounded' ? gridSpec.cellSize / 4 : 0;
 
   const cellNode = (r: PixelRect, color: string, key: string) =>
@@ -86,13 +95,15 @@ export function DynamicLayer({
           `o${i}`,
         ),
       )}
-      {snake.map((cell, i) =>
-        cellNode(
-          cellRect(gridSpec, cell, skin.cellGap),
-          i === 0 ? skin.snakeHead : skin.snakeBody,
-          `s${i}`,
-        ),
-      )}
+      <AnimatedSnake
+        glide={glide}
+        cellSize={gridSpec.cellSize}
+        origin={{ x: gridSpec.originX, y: gridSpec.originY }}
+        gap={skin.cellGap}
+        rounded={skin.cellShape === 'rounded'}
+        headColor={skin.snakeHead}
+        bodyColor={skin.snakeBody}
+      />
       {food !== null &&
         pickupNode(food, skin.foodColor, skin.foodShape, 'food')}
       {bonusFood != null &&

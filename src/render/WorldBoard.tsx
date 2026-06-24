@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Canvas, Fill, Group, Rect, RoundedRect } from '@shopify/react-native-skia';
+import { Canvas, Fill } from '@shopify/react-native-skia';
 import { useSkin } from '../skins/SkinProvider';
 import type { Viewport } from './camera';
 
@@ -12,58 +12,17 @@ interface WorldBoardProps {
 }
 
 /**
- * Static board layer for GPS mode: the background fill plus (optionally) grid
- * lines for just the cells inside the visible window. Unlike Board it draws the
- * fixed-size viewport grid (cols×rows), not the whole world, so the cost stays
- * bounded regardless of world size. A pure projection of viewport + skin. (chunk M)
+ * Background fill layer for GPS mode. The grid lines themselves now live in
+ * WorldDynamicLayer's camera group so they pan smoothly with the world; this
+ * layer just paints the skin background beneath them. Props are kept for a
+ * stable call site and possible future static board chrome. A pure projection
+ * of the active skin. (smooth GPS)
  */
-function WorldBoardComponent({ viewport, cellSize, gridOrigin }: WorldBoardProps) {
+function WorldBoardComponent(_props: WorldBoardProps) {
   const skin = useSkin();
-  const corner = skin.cellShape === 'rounded' ? cellSize / 4 : 0;
-  const inset = skin.cellGap / 2;
-  const size = cellSize - skin.cellGap;
-
-  const cells: React.ReactNode[] = [];
-  if (skin.gridLine !== null) {
-    for (let row = 0; row < viewport.rows; row++) {
-      for (let col = 0; col < viewport.cols; col++) {
-        const x = gridOrigin.x + col * cellSize + inset;
-        const y = gridOrigin.y + row * cellSize + inset;
-        const key = `${col},${row}`;
-        cells.push(
-          skin.cellShape === 'rounded' ? (
-            <RoundedRect
-              key={key}
-              x={x}
-              y={y}
-              width={size}
-              height={size}
-              r={corner}
-              color={skin.gridLine}
-              style="stroke"
-              strokeWidth={1}
-            />
-          ) : (
-            <Rect
-              key={key}
-              x={x}
-              y={y}
-              width={size}
-              height={size}
-              color={skin.gridLine}
-              style="stroke"
-              strokeWidth={1}
-            />
-          ),
-        );
-      }
-    }
-  }
-
   return (
     <Canvas style={StyleSheet.absoluteFill}>
       <Fill color={skin.background} />
-      <Group>{cells}</Group>
     </Canvas>
   );
 }

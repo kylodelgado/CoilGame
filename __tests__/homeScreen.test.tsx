@@ -5,22 +5,8 @@ import { useSettingsStore } from '../src/state/useSettingsStore';
 import { useScoresStore } from '../src/state/useScoresStore';
 import { DEFAULT_SETTINGS } from '../src/services/StoragePort';
 
-jest.mock('@shopify/react-native-skia', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const passthrough =
-    () =>
-    ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, null, children ?? null);
-  return {
-    Canvas: passthrough(),
-    Group: passthrough(),
-    Fill: passthrough(),
-    Rect: passthrough(),
-    RoundedRect: passthrough(),
-    Circle: passthrough(),
-  };
-});
+// Skia + Reanimated are stubbed globally in jest.setup.js (incl. useClock and the
+// worklet hooks the smooth-snake renderer uses); no per-file mock needed.
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({

@@ -4,22 +4,8 @@ import { PresetPreview } from '../src/render/PresetPreview';
 import { SkinProvider } from '../src/skins/SkinProvider';
 import { PRESETS, computeGrid } from '../src/engine';
 
-jest.mock('@shopify/react-native-skia', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const passthrough =
-    () =>
-    ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, null, children ?? null);
-  return {
-    Canvas: passthrough(),
-    Group: passthrough(),
-    Fill: passthrough(),
-    Rect: passthrough(),
-    RoundedRect: passthrough(),
-    Circle: passthrough(),
-  };
-});
+// Skia + Reanimated are stubbed globally in jest.setup.js (incl. useClock and the
+// worklet hooks the smooth-snake renderer uses); no per-file mock needed.
 
 const BOX_W = 120;
 const BOX_H = 160;

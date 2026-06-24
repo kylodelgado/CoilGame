@@ -61,6 +61,8 @@ interface Projection {
   bonusFood: Cell | null;
   obstacles: Cell[];
   score: number;
+  /** Current tick interval (ms); drives the snake's sub-tick glide duration. */
+  tickMs: number;
 }
 
 const toProjection = (s: GameState): Projection => ({
@@ -70,6 +72,7 @@ const toProjection = (s: GameState): Projection => ({
   bonusFood: s.bonusFood,
   obstacles: s.obstacles,
   score: s.score,
+  tickMs: s.tickMs,
 });
 
 export interface GameScreenProps {
@@ -164,6 +167,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     bonusFood: null,
     obstacles: [],
     score: 0,
+    tickMs: config.baseTickMs,
   }));
 
   const onTerminal = useCallback(
@@ -250,7 +254,8 @@ export function GameScreen(props: GameScreenProps = {}) {
     [controller],
   );
 
-  const { status, snake, food, bonusFood, obstacles, score } = projection;
+  const { status, snake, food, bonusFood, obstacles, score, tickMs } =
+    projection;
 
   // GPS render path: a camera window of the world that follows the snake's head.
   const world = config.world;
@@ -293,12 +298,14 @@ export function GameScreen(props: GameScreenProps = {}) {
             />
             <WorldDynamicLayer
               viewport={viewport}
+              world={world}
               cellSize={world.cellSize}
               gridOrigin={gridOrigin}
               snake={snake}
               food={food}
               bonusFood={bonusFood}
               obstacles={obstacles}
+              tickMs={tickMs}
             />
             <GpsArrow head={head} food={food} viewport={viewport} />
           </>
@@ -309,6 +316,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               gridSpec={grid}
               snake={snake}
               food={food}
+              tickMs={tickMs}
               bonusFood={bonusFood}
               obstacles={obstacles}
             />

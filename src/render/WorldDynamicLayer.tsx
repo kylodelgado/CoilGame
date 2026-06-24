@@ -6,9 +6,10 @@ import {
   Rect,
   RoundedRect,
 } from '@shopify/react-native-skia';
-import type { Cell, WorldSpec } from '../engine/types';
+import type { Cell, PowerupKind, WorldSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
 import { AnimatedSnake } from './AnimatedSnake';
+import { PowerupGlyph } from './PowerupGlyph';
 import type { Viewport } from './camera';
 import { useGpsCamera } from './useGpsCamera';
 import { useSnakeGlide } from './useSnakeGlide';
@@ -22,6 +23,8 @@ interface WorldDynamicLayerProps {
   snake: Cell[];
   food: Cell | null;
   bonusFood?: Cell | null;
+  /** Kind of the pickup in bonusFood; defaults to POINTS (the classic bonus). */
+  powerupKind?: PowerupKind;
   obstacles?: Cell[];
   /** Current tick interval (ms); the snake/camera sub-tick glide duration. */
   tickMs?: number;
@@ -45,6 +48,7 @@ export function WorldDynamicLayer({
   snake,
   food,
   bonusFood = null,
+  powerupKind = 'POINTS',
   obstacles = [],
   tickMs = 150,
 }: WorldDynamicLayerProps) {
@@ -154,9 +158,14 @@ export function WorldDynamicLayer({
         {food !== null &&
           inWindow(food) &&
           pickup(food, skin.foodColor, skin.foodShape, 'food')}
-        {bonusFood != null &&
-          inWindow(bonusFood) &&
-          pickup(bonusFood, skin.bonusColor, skin.bonusShape, 'bonus')}
+        {bonusFood != null && inWindow(bonusFood) && (
+          <PowerupGlyph
+            kind={powerupKind}
+            cx={gridOrigin.x + bonusFood.x * cellSize + cellSize / 2}
+            cy={gridOrigin.y + bonusFood.y * cellSize + cellSize / 2}
+            r={size / 2}
+          />
+        )}
         <AnimatedSnake
           glide={glide}
           cellSize={cellSize}

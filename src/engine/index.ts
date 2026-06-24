@@ -8,6 +8,7 @@ export * from './presets';
 export * from './grid';
 export * from './speed';
 export * from './food';
+export * from './powerups';
 export * from './input';
 export * from './createInitialState';
 export * from './movement';

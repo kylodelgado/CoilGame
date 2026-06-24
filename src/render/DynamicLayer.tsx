@@ -1,8 +1,9 @@
 import { StyleSheet } from 'react-native';
 import { Canvas, Circle, Rect, RoundedRect } from '@shopify/react-native-skia';
-import type { Cell, GridSpec } from '../engine/types';
+import type { Cell, GridSpec, PowerupKind } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
 import { AnimatedSnake } from './AnimatedSnake';
+import { PowerupGlyph } from './PowerupGlyph';
 import { useSnakeGlide } from './useSnakeGlide';
 import { cellRect, type PixelRect } from './geometry';
 
@@ -12,8 +13,10 @@ interface DynamicLayerProps {
   food: Cell | null;
   /** Current tick interval (ms); the snake's sub-tick glide duration. */
   tickMs?: number;
-  /** Active bonus pickup, or null/undefined when none is on the board. */
+  /** Active bonus/powerup pickup, or null/undefined when none is on the board. */
   bonusFood?: Cell | null;
+  /** Kind of the pickup in bonusFood; defaults to POINTS (the classic bonus). */
+  powerupKind?: PowerupKind;
   /** Dynamic-walls obstacle cells; empty/undefined for modes without them. */
   obstacles?: Cell[];
   /** Bump to snap the snake (no glide) after a restart/reset. */
@@ -34,6 +37,7 @@ export function DynamicLayer({
   food,
   tickMs = 150,
   bonusFood = null,
+  powerupKind = 'POINTS',
   obstacles = [],
   resetKey,
 }: DynamicLayerProps) {
@@ -107,7 +111,17 @@ export function DynamicLayer({
       {food !== null &&
         pickupNode(food, skin.foodColor, skin.foodShape, 'food')}
       {bonusFood != null &&
-        pickupNode(bonusFood, skin.bonusColor, skin.bonusShape, 'bonus')}
+        (() => {
+          const rect = cellRect(gridSpec, bonusFood, skin.cellGap);
+          return (
+            <PowerupGlyph
+              kind={powerupKind}
+              cx={rect.x + rect.width / 2}
+              cy={rect.y + rect.height / 2}
+              r={Math.min(rect.width, rect.height) / 2}
+            />
+          );
+        })()}
     </Canvas>
   );
 }

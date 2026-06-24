@@ -11,10 +11,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRESETS, computeGrid, computeSpeedMultiplier } from '../engine';
 import type {
+  ActiveEffect,
   Cell,
   Direction,
   GameState,
   ModeId,
+  PowerupKind,
   Preset,
   PresetId,
   WallBehavior,
@@ -49,6 +51,8 @@ import { useSettingsStore } from '../state/useSettingsStore';
 import { useScoresStore } from '../state/useScoresStore';
 import { useSkin } from '../skins/SkinProvider';
 import { PauseOverlay } from './PauseOverlay';
+import { ActiveEffectsHud } from './ActiveEffectsHud';
+import { PickupBanner } from './PickupBanner';
 
 const SCORE_BAR_HEIGHT = 64;
 const COUNTDOWN_SECONDS = 3;
@@ -59,6 +63,12 @@ interface Projection {
   snake: Cell[];
   food: Cell | null;
   bonusFood: Cell | null;
+  /** Kind of the pickup in bonusFood (POINTS for the classic bonus). */
+  powerupKind: PowerupKind;
+  /** Timed powerups in effect, each counting down. */
+  activeEffects: ActiveEffect[];
+  /** Kind eaten this tick, for the one-shot banner (null when none). */
+  pickupBanner: PowerupKind | null;
   obstacles: Cell[];
   score: number;
   /** Current tick interval (ms); drives the snake's sub-tick glide duration. */
@@ -70,6 +80,9 @@ const toProjection = (s: GameState): Projection => ({
   snake: s.snake,
   food: s.food,
   bonusFood: s.bonusFood,
+  powerupKind: s.powerupKind ?? 'POINTS',
+  activeEffects: s.activeEffects ?? [],
+  pickupBanner: s.pickupBanner ?? null,
   obstacles: s.obstacles,
   score: s.score,
   tickMs: s.tickMs,
@@ -165,6 +178,9 @@ export function GameScreen(props: GameScreenProps = {}) {
     snake: [],
     food: null,
     bonusFood: null,
+    powerupKind: 'POINTS',
+    activeEffects: [],
+    pickupBanner: null,
     obstacles: [],
     score: 0,
     tickMs: config.baseTickMs,
@@ -254,8 +270,18 @@ export function GameScreen(props: GameScreenProps = {}) {
     [controller],
   );
 
-  const { status, snake, food, bonusFood, obstacles, score, tickMs } =
-    projection;
+  const {
+    status,
+    snake,
+    food,
+    bonusFood,
+    powerupKind,
+    activeEffects,
+    pickupBanner,
+    obstacles,
+    score,
+    tickMs,
+  } = projection;
   // Player-facing speed, relative to this preset's starting pace (1.0× → cap).
   const speedMultiplier = computeSpeedMultiplier(config.baseTickMs, tickMs);
 
@@ -297,6 +323,9 @@ export function GameScreen(props: GameScreenProps = {}) {
         </Pressable>
       </View>
 
+      {/* Countdown bars for active timed powerups, just under the score bar. */}
+      <ActiveEffectsHud effects={activeEffects} />
+
       <View testID="game-board" style={styles.board}>
         {viewport !== null && world !== undefined ? (
           <>
@@ -313,6 +342,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               snake={snake}
               food={food}
               bonusFood={bonusFood}
+              powerupKind={powerupKind}
               obstacles={obstacles}
               tickMs={tickMs}
             />
@@ -327,11 +357,15 @@ export function GameScreen(props: GameScreenProps = {}) {
               food={food}
               tickMs={tickMs}
               bonusFood={bonusFood}
+              powerupKind={powerupKind}
               obstacles={obstacles}
             />
           </>
         )}
         {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
+
+        {/* Flashes "what it does" when a powerup is grabbed. */}
+        <PickupBanner pickup={pickupBanner} />
 
         {status === 'TAP_TO_START' && (
           <Pressable

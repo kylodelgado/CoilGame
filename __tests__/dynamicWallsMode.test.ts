@@ -39,12 +39,16 @@ describe('dynamicWallsMode (step 39)', () => {
     expect(MODES.CLASSIC).toBe(classicMode);
   });
 
-  it('buildConfig matches the classic mapping plus bonus enabled', () => {
+  it('buildConfig is the classic mapping plus the full powerup pool', () => {
     for (const wall of ['SOLID', 'PORTAL'] as const) {
       const a = dynamicWallsMode.buildConfig(GRID, wall, PRESETS.STANDARD);
       const b = classicMode.buildConfig(GRID, wall, PRESETS.STANDARD);
-      expect(a).toEqual(b);
+      // Everything but the added powerups matches classic.
+      const { powerups, ...rest } = a;
+      expect(rest).toEqual(b);
       expect(a.bonus.enabled).toBe(true);
+      // This mode has obstacles, so WALL_BUSTER is in the pool.
+      expect(powerups?.pool).toContain('WALL_BUSTER');
     }
   });
 

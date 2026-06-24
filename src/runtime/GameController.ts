@@ -167,6 +167,15 @@ export function createGameController(deps: GameControllerDeps): GameController {
           case 'BONUS_EXPIRED':
             // No side effect — the bonus simply despawned.
             break;
+          case 'GOT_POWERUP':
+            // A powerup was grabbed — reuse the eat haptic for tactile feedback.
+            if (isHapticsEnabled()) {
+              haptics.eat();
+            }
+            break;
+          case 'EFFECT_EXPIRED':
+            // A timed effect ended; no haptic/sound this phase.
+            break;
           case 'DIED':
             if (isHapticsEnabled()) {
               haptics.death();

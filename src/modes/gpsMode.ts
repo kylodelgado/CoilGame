@@ -1,4 +1,4 @@
-import { worldGrid } from '../engine';
+import { buildPowerups, worldGrid } from '../engine';
 import type { GameConfig } from '../engine/types';
 import { classicMode } from './classicMode';
 import { createDynamicWallsMode } from './dynamicWallsMode';
@@ -42,6 +42,9 @@ export function createGpsMode(): Mode {
           worldRows: GPS_WORLD_ROWS,
           cellSize: grid.cellSize,
         },
+        // GPS runs Dynamic Walls over the world, so it has obstacles — the full
+        // powerup pool (incl. WALL_BUSTER) applies.
+        powerups: buildPowerups({ walls: true }),
       };
     },
 

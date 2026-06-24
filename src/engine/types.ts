@@ -66,6 +66,52 @@ export interface BonusConfig {
   points: number;
 }
 
+/**
+ * The kinds of pickup that can occupy the single bonus slot. POINTS is the
+ * classic bonus (points, no growth); the rest are powerups with timed or
+ * permanent effects. WALL_BUSTER is only ever placed in pools for modes that
+ * have obstacles. (Phase 2 powerups)
+ */
+export type PowerupKind =
+  | 'POINTS'
+  | 'MAGNET'
+  | 'SLOW'
+  | 'SHRINK'
+  | 'DOUBLE'
+  | 'WALL_BUSTER';
+
+/** A powerup whose effect lasts a number of ticks; tracked in GameState. */
+export interface ActiveEffect {
+  kind: PowerupKind;
+  /** Ticks left before the effect ends; counts down each RUNNING tick. */
+  remainingTicks: number;
+  /** The duration it started with, so the UI can draw a countdown fraction. */
+  totalTicks: number;
+}
+
+/**
+ * Powerup tunables, layered ON TOP of BonusConfig (which still governs the
+ * pickup's spawn cadence and on-board lifetime). Present only for modes that opt
+ * into powerups; absent => the bonus slot is always POINTS and play is
+ * byte-identical to before. (Phase 2 powerups)
+ */
+export interface PowerupsConfig {
+  /** Kinds eligible to spawn; repeat a kind to weight it more likely. */
+  pool: PowerupKind[];
+  /** Active duration (ticks) for each timed effect. */
+  durationTicks: Record<'MAGNET' | 'DOUBLE' | 'WALL_BUSTER', number>;
+  /** Milliseconds added to tickMs per SLOW pickup (permanent for the run). */
+  slowMs: number;
+  /** Tail cells removed by SHRINK. */
+  shrinkBy: number;
+  /** Length SHRINK will never reduce the snake below. */
+  minLength: number;
+  /** Score multiplier while DOUBLE is active. */
+  doubleMultiplier: number;
+  /** Chebyshev radius of obstacle clearing around the head under WALL_BUSTER. */
+  wallBusterRadius: number;
+}
+
 export interface GameConfig {
   grid: GridSpec;
   wallBehavior: WallBehavior;
@@ -82,6 +128,13 @@ export interface GameConfig {
    * Additive and optional, so fixed-board configs are unchanged.
    */
   world?: WorldSpec;
+  /**
+   * Present only for modes that opt into powerups. When set, the bonus slot
+   * spawns a kind drawn from the pool and the engine applies powerup effects;
+   * absent => the bonus slot is always POINTS. Additive and optional, so classic
+   * configs are byte-identical. (Phase 2 powerups)
+   */
+  powerups?: PowerupsConfig;
 }
 
 export interface GameState {
@@ -110,6 +163,22 @@ export interface GameState {
    * the engine treats it as read-only within a single tick. (Dynamic Walls)
    */
   obstacles: Cell[];
+  /**
+   * Kind of the pickup currently in the bonus slot (the bonusFood cell). Absent
+   * (treated as POINTS) for non-powerup play, keeping classic byte-identical.
+   * (Phase 2 powerups)
+   */
+  powerupKind?: PowerupKind;
+  /** Timed powerups in effect, each counting down; absent => none. */
+  activeEffects?: ActiveEffect[];
+  /** Accumulated permanent slow (ms) added to tickMs; absent => 0. */
+  slowMs?: number;
+  /**
+   * Set to the kind eaten THIS tick (and cleared the next), purely as a one-shot
+   * signal for the UI to flash a "what it does" banner. Pure: it is part of the
+   * derived state, not a side effect. (Phase 2 powerups)
+   */
+  pickupBanner?: PowerupKind | null;
 }
 
 export type ControlScheme = 'SWIPE' | 'DPAD';
@@ -138,7 +207,11 @@ export type GameEvent =
   | 'DIED'
   | 'WON'
   | 'ATE_BONUS'
-  | 'BONUS_EXPIRED';
+  | 'BONUS_EXPIRED'
+  /** A powerup (non-POINTS) was picked up this tick. */
+  | 'GOT_POWERUP'
+  /** A timed powerup effect counted down to zero this tick. */
+  | 'EFFECT_EXPIRED';
 
 export interface TickResult {
   state: GameState;

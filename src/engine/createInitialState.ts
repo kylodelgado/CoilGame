@@ -39,6 +39,11 @@ export function createInitialState(
       ? config.bonus.spawnEveryTicks
       : BONUS_DISABLED,
     obstacles: [],
+    // Powerup state is seeded only for modes that opt in, so classic stays
+    // byte-identical. (Phase 2 powerups)
+    ...(config.powerups
+      ? { activeEffects: [], slowMs: 0, pickupBanner: null }
+      : {}),
   };
 
   return { ...base, food: spawnFood(base, config, rng) };

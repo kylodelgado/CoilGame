@@ -1,6 +1,7 @@
 import {
   createInitialState as engineCreateInitialState,
   tick as engineTick,
+  buildPowerups,
   computeNextHead,
   resolveWall,
 } from '../engine';
@@ -8,20 +9,21 @@ import type { Cell, GameConfig, GameState, TickResult } from '../engine/types';
 import type { RandomPort } from '../services/RandomPort';
 import { classicMode } from './classicMode';
 import type { Mode } from './Mode';
+import { placeShape } from './wallShapes';
 
 /** Scheduling/placement tunables for Dynamic Walls. */
 export interface DynamicWallsTunables {
   /** Evolve the obstacle set every this many RUNNING ticks. */
   changeEveryTicks: number;
-  /** Hard cap on obstacles; the oldest is relocated once at the cap. */
+  /** Hard cap on obstacle CELLS; the oldest cells are dropped past the cap. */
   maxObstacles: number;
-  /** How many obstacles to add/relocate per scheduled change. */
+  /** How many obstacle SHAPES to add per scheduled change. */
   obstaclesPerChange: number;
 }
 
 export const DYNAMIC_WALLS_TUNABLES: DynamicWallsTunables = {
   changeEveryTicks: 20,
-  maxObstacles: 12,
+  maxObstacles: 16,
   obstaclesPerChange: 1,
 };
 
@@ -37,10 +39,11 @@ function headNextCell(state: GameState, config: GameConfig): Cell | null {
 }
 
 /**
- * Evolve the obstacle set immutably: add up to obstaclesPerChange obstacles on
- * empty cells chosen via rng, never on the snake, food, bonus, an existing
- * obstacle, or the cell the head will enter this tick (no instant trap, EH-18).
- * At the cap the oldest obstacle is dropped (relocated) to make room.
+ * Evolve the obstacle set immutably: add obstaclesPerChange SHAPES (lines, Ls,
+ * squares — see wallShapes) on fair cells chosen via rng, never overlapping the
+ * snake, food, bonus, an existing obstacle, or the cell the head will enter this
+ * tick (no instant trap, EH-18). Past the maxObstacles cell cap the oldest cells
+ * are dropped to make room, so the hazard field keeps churning.
  */
 function evolveObstacles(
   state: GameState,
@@ -48,7 +51,7 @@ function evolveObstacles(
   rng: RandomPort,
   tunables: DynamicWallsTunables,
 ): Cell[] {
-  const { columns, rows } = config.grid;
+  const { columns } = config.grid;
   const headNext = headNextCell(state, config);
 
   let obstacles = state.obstacles;
@@ -63,22 +66,14 @@ function evolveObstacles(
     if (state.bonusFood) block(state.bonusFood);
     if (headNext) block(headNext);
 
-    const candidates: Cell[] = [];
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < columns; x++) {
-        if (!blocked.has(y * columns + x)) {
-          candidates.push({ x, y });
-        }
-      }
-    }
-    if (candidates.length === 0) {
+    const cells = placeShape(blocked, config.grid, rng);
+    if (cells.length === 0) {
       break; // nowhere fair to place — skip the rest of this change
     }
 
-    const cell = candidates[rng.nextInt(candidates.length)];
-    let next = [...obstacles, cell];
+    let next = [...obstacles, ...cells];
     if (next.length > tunables.maxObstacles) {
-      // Drop the oldest (front of the queue) — effectively relocating it.
+      // Drop the oldest cells (front of the queue) to stay within the cap.
       next = next.slice(next.length - tunables.maxObstacles);
     }
     obstacles = next;
@@ -104,9 +99,13 @@ export function createDynamicWallsMode(
     id: 'DYNAMIC_WALLS',
 
     buildConfig(grid, wall, preset) {
-      // Identical to classic (incl. bonus enabled); dynamic-walls tunables are
-      // mode-local, not part of GameConfig.
-      return classicMode.buildConfig(grid, wall, preset);
+      // Classic base (incl. bonus timing), plus the full powerup pool — this is
+      // the mode with obstacles, so WALL_BUSTER is enabled here. Dynamic-walls
+      // scheduling tunables stay mode-local, not part of GameConfig.
+      return {
+        ...classicMode.buildConfig(grid, wall, preset),
+        powerups: buildPowerups({ walls: true }),
+      };
     },
 
     createInitialState(config, rng): GameState {

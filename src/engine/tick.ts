@@ -1,6 +1,7 @@
 import type { RandomPort } from '../services/RandomPort';
 import { spawnFood, spawnBonus } from './food';
 import { computeNextHead, resolveWall } from './movement';
+import { applyPowerups, scoreMultiplier } from './powerups';
 import { computeTickMs } from './speed';
 import type {
   Cell,
@@ -158,13 +159,17 @@ export function tick(
   } else {
     const snake = [nextHead, ...state.snake];
     const foodEaten = state.foodEaten + 1;
-    const score = state.score + config.pointsPerFood;
-    const tickMs = computeTickMs(
-      config.baseTickMs,
-      config.minTickMs,
-      config.accelMsPerFood,
-      foodEaten,
-    );
+    // Score gains scale with an active DOUBLE; permanent SLOW raises the floor.
+    // Both are no-ops without config.powerups, so classic scoring is unchanged.
+    const score =
+      state.score + config.pointsPerFood * scoreMultiplier(state, config);
+    const tickMs =
+      computeTickMs(
+        config.baseTickMs,
+        config.minTickMs,
+        config.accelMsPerFood,
+        foodEaten,
+      ) + (state.slowMs ?? 0);
     events.push('ATE_FOOD');
 
     const grown: GameState = {
@@ -188,8 +193,15 @@ export function tick(
     }
   }
 
-  // 8. Bonus overlay. A no-op when disabled, so classic play is byte-identical:
-  //    `moved` already carries the input's bonus fields untouched via `...state`.
+  // 8. Pickup overlay. The powerup-aware overlay subsumes the bonus slot (POINTS
+  //    is just one kind) and adds effects; it runs only when a mode opts in via
+  //    config.powerups. Otherwise the classic bonus overlay applies, or nothing.
+  if (config.powerups) {
+    return {
+      state: applyPowerups(moved, state, nextHead, config, rng, events),
+      events,
+    };
+  }
   if (!config.bonus.enabled) {
     return { state: moved, events };
   }

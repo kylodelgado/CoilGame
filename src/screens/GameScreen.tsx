@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PRESETS, computeGrid } from '../engine';
+import { PRESETS, computeGrid, computeSpeedMultiplier } from '../engine';
 import type {
   Cell,
   Direction,
@@ -256,6 +256,8 @@ export function GameScreen(props: GameScreenProps = {}) {
 
   const { status, snake, food, bonusFood, obstacles, score, tickMs } =
     projection;
+  // Player-facing speed, relative to this preset's starting pace (1.0× → cap).
+  const speedMultiplier = computeSpeedMultiplier(config.baseTickMs, tickMs);
 
   // GPS render path: a camera window of the world that follows the snake's head.
   const world = config.world;
@@ -276,6 +278,13 @@ export function GameScreen(props: GameScreenProps = {}) {
       <View style={[styles.hud, { height: SCORE_BAR_HEIGHT }]}>
         <Text testID="score-hud" style={[styles.score, { color: skin.snakeHead }]}>
           {score}
+        </Text>
+        <Text
+          testID="speed-hud"
+          accessibilityLabel={`Speed ${speedMultiplier.toFixed(1)} times`}
+          style={[styles.speed, { color: skin.snakeBody }]}
+        >
+          {speedMultiplier.toFixed(1)}×
         </Text>
         <Pressable
           testID="pause-button"
@@ -377,6 +386,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   score: { fontSize: 28, fontWeight: '800' },
+  speed: { fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] },
   pauseButton: { padding: 8 },
   pauseGlyph: { color: '#fff', fontSize: 20 },
   board: { flex: 1 },

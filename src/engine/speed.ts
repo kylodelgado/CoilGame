@@ -11,3 +11,15 @@ export function computeTickMs(
 ): number {
   return Math.max(minTickMs, baseTickMs - accelMsPerFood * foodEaten);
 }
+
+/**
+ * The player-facing speed multiplier: how fast the snake moves now relative to
+ * its starting pace. 1.0 at baseTickMs, rising as the tick interval shrinks and
+ * naturally capping at baseTickMs/minTickMs (tickMs is already clamped). Pure.
+ */
+export function computeSpeedMultiplier(
+  baseTickMs: number,
+  tickMs: number,
+): number {
+  return baseTickMs / tickMs;
+}

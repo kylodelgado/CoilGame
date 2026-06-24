@@ -100,6 +100,8 @@ describe('GameScreen integration', () => {
     expect(screen.getByTestId('game-board')).toBeOnTheScreen();
     expect(screen.getByTestId('tap-to-start-overlay')).toBeOnTheScreen();
     expect(screen.getByTestId('score-hud')).toHaveTextContent('0');
+    // Speed starts at the base pace: exactly 1.0× before any acceleration.
+    expect(screen.getByTestId('speed-hud')).toHaveTextContent('1.0×');
 
     fireEvent.press(screen.getByTestId('tap-to-start-overlay'));
     expect(screen.getByTestId('countdown-overlay')).toBeOnTheScreen();

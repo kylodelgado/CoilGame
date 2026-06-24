@@ -1,4 +1,4 @@
-import { computeTickMs } from '../src/engine/speed';
+import { computeSpeedMultiplier, computeTickMs } from '../src/engine/speed';
 
 describe('computeTickMs (FR-S2)', () => {
   const base = 200;
@@ -39,6 +39,34 @@ describe('computeTickMs (FR-S2)', () => {
       expect(tick).toBeLessThanOrEqual(prev);
       expect(tick).toBeGreaterThanOrEqual(min);
       prev = tick;
+    }
+  });
+});
+
+describe('computeSpeedMultiplier', () => {
+  const base = 220;
+  const min = 110;
+
+  it('is exactly 1.0 at the starting pace', () => {
+    expect(computeSpeedMultiplier(base, base)).toBe(1);
+  });
+
+  it('rises as the tick interval shrinks', () => {
+    expect(computeSpeedMultiplier(base, 200)).toBeCloseTo(1.1, 5);
+    expect(computeSpeedMultiplier(base, 110)).toBe(2); // base/min
+  });
+
+  it('tracks the clamp: caps at baseTickMs/minTickMs at top speed', () => {
+    const top = computeTickMs(base, min, 4, 100000); // == min
+    expect(computeSpeedMultiplier(base, top)).toBe(base / min);
+  });
+
+  it('is monotonically non-decreasing as tickMs falls toward min', () => {
+    let prev = 0;
+    for (let tick = base; tick >= min; tick -= 4) {
+      const mult = computeSpeedMultiplier(base, tick);
+      expect(mult).toBeGreaterThanOrEqual(prev);
+      prev = mult;
     }
   });
 });

@@ -6,10 +6,13 @@ import {
   Rect,
   RoundedRect,
 } from '@shopify/react-native-skia';
+import { useMemo } from 'react';
 import type { Cell, PowerupKind, WorldSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
 import { AnimatedSnake } from './AnimatedSnake';
+import { BurstField } from './BurstField';
 import { PowerupGlyph } from './PowerupGlyph';
+import { POWERUP_META } from './powerupMeta';
 import type { Viewport } from './camera';
 import { useGpsCamera } from './useGpsCamera';
 import { useSnakeGlide } from './useSnakeGlide';
@@ -26,9 +29,16 @@ interface WorldDynamicLayerProps {
   /** Kind of the pickup in bonusFood; defaults to POINTS (the classic bonus). */
   powerupKind?: PowerupKind;
   obstacles?: Cell[];
+  /** Cells smashed by WALL_BUSTER this tick; bursts a destruction effect. */
+  bustedCells?: Cell[];
+  /** Kind grabbed this tick (one-shot); bursts a pickup effect at the head. */
+  pickupBanner?: PowerupKind | null;
   /** Current tick interval (ms); the snake/camera sub-tick glide duration. */
   tickMs?: number;
 }
+
+const EMPTY_CELLS: Cell[] = [];
+const EMPTY_POINTS: { x: number; y: number }[] = [];
 
 /**
  * The GPS scene: the world grid, obstacles, food/bonus, and the gliding snake,
@@ -50,6 +60,8 @@ export function WorldDynamicLayer({
   bonusFood = null,
   powerupKind = 'POINTS',
   obstacles = [],
+  bustedCells = EMPTY_CELLS,
+  pickupBanner = null,
   tickMs = 150,
 }: WorldDynamicLayerProps) {
   const skin = useSkin();
@@ -63,6 +75,22 @@ export function WorldDynamicLayer({
   // Absolute world-pixel position of a cell's top-left (camera applies the pan).
   const px = (worldCol: number) => gridOrigin.x + worldCol * cellSize + inset;
   const py = (worldRow: number) => gridOrigin.y + worldRow * cellSize + inset;
+  // Absolute world-pixel center of a cell (for effect spawns; camera pans them).
+  const center = (cell: Cell) => ({
+    x: gridOrigin.x + cell.x * cellSize + cellSize / 2,
+    y: gridOrigin.y + cell.y * cellSize + cellSize / 2,
+  });
+  const bustSpawns = useMemo(
+    () => bustedCells.map(center),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bustedCells],
+  );
+  const headCell = snake[0];
+  const pickupSpawns = useMemo(
+    () => (pickupBanner != null && headCell ? [center(headCell)] : EMPTY_POINTS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pickupBanner, headCell],
+  );
 
   // Is a world cell within the (slightly padded) visible window? Static actors
   // outside it are skipped so a large world stays cheap.
@@ -174,6 +202,17 @@ export function WorldDynamicLayer({
           rounded={skin.cellShape === 'rounded'}
           headColor={skin.snakeHead}
           bodyColor={skin.snakeBody}
+        />
+        {/* Effects live inside the camera group so they pan with the world. */}
+        <BurstField
+          spawns={bustSpawns}
+          color={POWERUP_META.WALL_BUSTER.color}
+          size={cellSize / 3}
+        />
+        <BurstField
+          spawns={pickupSpawns}
+          color={pickupBanner ? POWERUP_META[pickupBanner].color : '#fff'}
+          size={cellSize / 3}
         />
       </Group>
     </Canvas>

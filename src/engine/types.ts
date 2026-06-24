@@ -179,6 +179,13 @@ export interface GameState {
    * derived state, not a side effect. (Phase 2 powerups)
    */
   pickupBanner?: PowerupKind | null;
+  /**
+   * Obstacle cells removed THIS tick by WALL_BUSTER (empty otherwise, cleared the
+   * next tick). A one-shot signal so the renderer can burst a destruction effect
+   * exactly where walls were smashed — distinct from cap-driven relocation. Pure.
+   * (Phase 2 powerups)
+   */
+  bustedCells?: Cell[];
 }
 
 export type ControlScheme = 'SWIPE' | 'DPAD';

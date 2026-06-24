@@ -1,4 +1,5 @@
 import {
+  buildPowerups,
   createInitialState,
   tick,
   POINTS_PER_FOOD,
@@ -38,6 +39,9 @@ export const classicMode: Mode = {
         lifetimeTicks: BONUS_LIFETIME_TICKS,
         points: BONUS_POINTS,
       },
+      // Powerups in every mode; this one has no obstacles, so WALL_BUSTER is
+      // gated out of the pool. Modes with obstacles override with walls:true.
+      powerups: buildPowerups({ walls: false }),
     };
   },
 

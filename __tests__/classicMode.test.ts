@@ -35,7 +35,9 @@ describe('classicMode (mode seam)', () => {
     const preset = PRESETS[id];
     for (const wall of walls) {
       const config = classicMode.buildConfig(grid, wall, preset);
-      const expected: GameConfig = {
+      // Powerups are enabled in every mode; compare the rest against the mapping.
+      const { powerups, ...rest } = config;
+      const expected: Omit<GameConfig, 'powerups'> = {
         grid,
         wallBehavior: wall,
         baseTickMs: preset.baseTickMs,
@@ -51,10 +53,13 @@ describe('classicMode (mode seam)', () => {
           points: 50,
         },
       };
-      expect(config).toEqual(expected);
+      expect(rest).toEqual(expected);
       expect(config.pointsPerFood).toBe(10);
       expect(config.startLength).toBe(3);
       expect(config.startDirection).toBe('RIGHT');
+      // Classic has no obstacles, so WALL_BUSTER is gated out of its pool.
+      expect(powerups?.pool).toBeDefined();
+      expect(powerups?.pool).not.toContain('WALL_BUSTER');
     }
   });
 

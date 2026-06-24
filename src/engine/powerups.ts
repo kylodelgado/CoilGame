@@ -215,6 +215,7 @@ export function applyPowerups(
     ...moved,
     activeEffects: advanced.next,
     pickupBanner: null,
+    bustedCells: [],
   };
 
   // 2. Eat the pickup present at the START of the tick (kind from prev).
@@ -273,10 +274,17 @@ export function applyPowerups(
     };
   }
   if (next.obstacles.length > 0 && hasEffect(next.activeEffects, 'WALL_BUSTER')) {
-    next = {
-      ...next,
-      obstacles: bustWalls(next.obstacles, head, pw.wallBusterRadius),
-    };
+    const surviving = bustWalls(next.obstacles, head, pw.wallBusterRadius);
+    if (surviving.length !== next.obstacles.length) {
+      const survivingKeys = new Set(surviving.map((c) => `${c.x},${c.y}`));
+      next = {
+        ...next,
+        obstacles: surviving,
+        bustedCells: next.obstacles.filter(
+          (o) => !survivingKeys.has(`${o.x},${o.y}`),
+        ),
+      };
+    }
   }
 
   return next;

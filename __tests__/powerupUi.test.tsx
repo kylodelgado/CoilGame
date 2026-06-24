@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react-native';
 import { SkinProvider } from '../src/skins/SkinProvider';
 import { PowerupGlyph } from '../src/render/PowerupGlyph';
+import { BurstField } from '../src/render/BurstField';
 import { ActiveEffectsHud } from '../src/screens/ActiveEffectsHud';
 import { PickupBanner } from '../src/screens/PickupBanner';
 import { POWERUP_META } from '../src/render/powerupMeta';
@@ -16,6 +17,24 @@ const wrap = (node: React.ReactElement) =>
 describe('PowerupGlyph', () => {
   it.each(ALL_KINDS)('renders a glyph for %s without crashing', (kind) => {
     expect(() => wrap(<PowerupGlyph kind={kind} cx={10} cy={10} r={6} />)).not.toThrow();
+  });
+});
+
+describe('BurstField', () => {
+  it('mounts with no spawns and with a batch of spawns without crashing', () => {
+    expect(() => render(<BurstField spawns={[]} color="#fff" size={6} />)).not.toThrow();
+    expect(() =>
+      render(
+        <BurstField
+          spawns={[
+            { x: 10, y: 10 },
+            { x: 30, y: 20 },
+          ]}
+          color="#FF8A3D"
+          size={6}
+        />,
+      ),
+    ).not.toThrow();
   });
 });
 

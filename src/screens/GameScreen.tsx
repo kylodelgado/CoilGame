@@ -70,6 +70,8 @@ interface Projection {
   /** Kind eaten this tick, for the one-shot banner (null when none). */
   pickupBanner: PowerupKind | null;
   obstacles: Cell[];
+  /** Cells smashed by WALL_BUSTER this tick, for the destruction burst. */
+  bustedCells: Cell[];
   score: number;
   /** Current tick interval (ms); drives the snake's sub-tick glide duration. */
   tickMs: number;
@@ -84,6 +86,7 @@ const toProjection = (s: GameState): Projection => ({
   activeEffects: s.activeEffects ?? [],
   pickupBanner: s.pickupBanner ?? null,
   obstacles: s.obstacles,
+  bustedCells: s.bustedCells ?? [],
   score: s.score,
   tickMs: s.tickMs,
 });
@@ -182,6 +185,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     activeEffects: [],
     pickupBanner: null,
     obstacles: [],
+    bustedCells: [],
     score: 0,
     tickMs: config.baseTickMs,
   }));
@@ -279,6 +283,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     activeEffects,
     pickupBanner,
     obstacles,
+    bustedCells,
     score,
     tickMs,
   } = projection;
@@ -344,6 +349,8 @@ export function GameScreen(props: GameScreenProps = {}) {
               bonusFood={bonusFood}
               powerupKind={powerupKind}
               obstacles={obstacles}
+              bustedCells={bustedCells}
+              pickupBanner={pickupBanner}
               tickMs={tickMs}
             />
             <GpsArrow head={head} food={food} viewport={viewport} />
@@ -359,6 +366,8 @@ export function GameScreen(props: GameScreenProps = {}) {
               bonusFood={bonusFood}
               powerupKind={powerupKind}
               obstacles={obstacles}
+              bustedCells={bustedCells}
+              pickupBanner={pickupBanner}
             />
           </>
         )}

@@ -234,6 +234,26 @@ describe('eating powerups via tick', () => {
     const { state: next } = tick(state, config, rng);
     expect(next.obstacles).toContainEqual({ x: 11, y: 11 });
     expect(next.obstacles).not.toContainEqual({ x: 5, y: 3 });
+    // The cleared cell is reported for the destruction effect.
+    expect(next.bustedCells).toContainEqual({ x: 5, y: 3 });
+    expect(next.bustedCells).not.toContainEqual({ x: 11, y: 11 });
+  });
+
+  it('reports no bustedCells on a tick that smashes nothing', () => {
+    const state = makeState({
+      snake: [
+        { x: 5, y: 5 },
+        { x: 4, y: 5 },
+      ],
+      direction: 'UP',
+      food: { x: 0, y: 0 },
+      obstacles: [{ x: 11, y: 11 }], // far from the head
+      activeEffects: [
+        { kind: 'WALL_BUSTER', remainingTicks: 10, totalTicks: 30 },
+      ],
+    });
+    const { state: next } = tick(state, config, rng);
+    expect(next.bustedCells).toEqual([]);
   });
 });
 

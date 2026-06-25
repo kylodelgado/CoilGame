@@ -52,6 +52,10 @@ jest.mock('@shopify/react-native-skia', () => {
   const fakePath = {
     addRRect: () => fakePath,
     addRect: () => fakePath,
+    addCircle: () => fakePath,
+    moveTo: () => fakePath,
+    lineTo: () => fakePath,
+    close: () => fakePath,
     reset: () => fakePath,
     rewind: () => fakePath,
   };

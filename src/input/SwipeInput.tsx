@@ -9,12 +9,10 @@ import {
 } from './InputSource';
 
 /**
- * Swipe InputSource. A Pan gesture covering the play area maps swipes to a
- * Direction via the pure translationToDirection helper and pushes them to
- * subscribers. The turn fires the instant travel crosses the threshold DURING the
- * drag (not on finger-lift), then re-anchors so a continued drag can chain a
- * second turn — this removes the lift latency that made fast play feel laggy. The
- * gesture object is returned for attachment; subscribe is the InputSource seam.
+ * Swipe InputSource. A Pan gesture covering the play area maps each completed
+ * swipe to a Direction via the pure translationToDirection helper and pushes it
+ * to subscribers. The gesture object is returned for attachment; subscribe is
+ * the InputSource seam (a D-pad can implement the same contract in Phase 2).
  *
  * With Reanimated installed, RNGH runs gesture callbacks as UI-thread worklets
  * by default. We force them back onto the JS thread with .runOnJS(true) so the
@@ -24,28 +22,19 @@ export function useSwipeInput(
   threshold: number = SWIPE_THRESHOLD_PX,
 ): { gesture: ReturnType<typeof Gesture.Pan>; subscribe: InputSource['subscribe'] } {
   const listeners = useRef(new Set<(dir: Direction) => void>()).current;
-  // Translation (since gesture start) at which we last emitted a turn; deltas are
-  // measured from here so each fresh threshold of travel chains another turn.
-  const anchor = useRef({ x: 0, y: 0 });
 
   const gesture = useMemo(
     () =>
-      Gesture.Pan()
-        .runOnJS(true)
-        .onBegin(() => {
-          anchor.current = { x: 0, y: 0 };
-        })
-        .onUpdate((e) => {
-          const dir = translationToDirection(
-            e.translationX - anchor.current.x,
-            e.translationY - anchor.current.y,
-            threshold,
-          );
-          if (dir !== null) {
-            anchor.current = { x: e.translationX, y: e.translationY };
-            listeners.forEach((listener) => listener(dir));
-          }
-        }),
+      Gesture.Pan().runOnJS(true).onEnd((e) => {
+        const dir = translationToDirection(
+          e.translationX,
+          e.translationY,
+          threshold,
+        );
+        if (dir !== null) {
+          listeners.forEach((listener) => listener(dir));
+        }
+      }),
     [listeners, threshold],
   );
 

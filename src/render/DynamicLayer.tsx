@@ -134,6 +134,7 @@ export function DynamicLayer({
         origin={{ x: gridSpec.originX, y: gridSpec.originY }}
         gap={skin.cellGap}
         rounded={skin.cellShape === 'rounded'}
+        render={skin.snakeRender}
         headColor={skin.snakeHead}
         bodyColor={skin.snakeBody}
       />

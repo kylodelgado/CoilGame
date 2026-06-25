@@ -200,6 +200,7 @@ export function WorldDynamicLayer({
           origin={gridOrigin}
           gap={skin.cellGap}
           rounded={skin.cellShape === 'rounded'}
+          render={skin.snakeRender}
           headColor={skin.snakeHead}
           bodyColor={skin.snakeBody}
         />

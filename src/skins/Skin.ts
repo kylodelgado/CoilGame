@@ -15,6 +15,12 @@ export interface Skin {
   /** Snake head color — brighter than the body so it stays locatable. */
   snakeHead: string;
   snakeBody: string;
+  /**
+   * How the snake body is drawn: 'tube' = one continuous stroked path that flows
+   * smoothly around corners; 'segments' = discrete rounded cells with a gap, the
+   * classic blocky look. The renderer picks per skin. (snake render)
+   */
+  snakeRender: 'tube' | 'segments';
   foodColor: string;
   foodShape: 'square' | 'circle';
   /** Bonus pickup color — distinct from foodColor so it reads as special. */

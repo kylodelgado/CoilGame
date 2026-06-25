@@ -10,10 +10,12 @@ export const neon: Skin = {
   id: 'neon',
   background: '#0B0B12',
   gridLine: '#1A1A33',
-  cellGap: 1,
+  cellGap: 2,
   cellShape: 'rounded',
   snakeHead: '#00FFFF',
   snakeBody: '#0A8A8A',
+  // Neon keeps the classic look: separated rounded-rectangle segments.
+  snakeRender: 'segments',
   foodColor: '#FF2EC4',
   foodShape: 'circle',
   bonusColor: '#FFE600', // electric yellow, contrasts the magenta food

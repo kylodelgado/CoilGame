@@ -5,12 +5,49 @@ import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
 
 /**
- * Build the snake body as a single polyline through the interpolated centers of
- * its cells, head-first. Drawn STROKED (thick, with round/bevel joins) this reads
- * as one continuous tube that flows around corners — instead of a chain of
- * separate squares that visibly jump at turns. The path breaks (moveTo) whenever
- * two consecutive drawn points are far apart in pixels, which happens on a PORTAL
- * wrap, so the tube never streaks across the board. UI-thread worklet; pure.
+ * Append a SMOOTH curve through pts[s..e) to the path: each interior point is a
+ * quadratic control point and the curve passes through the midpoints between
+ * consecutive points, so the body genuinely bends through corners (a slither)
+ * rather than making a hard L. Straight runs stay straight. UI-thread worklet.
+ */
+function appendSmoothRun(
+  path: ReturnType<typeof Skia.Path.Make>,
+  xs: number[],
+  ys: number[],
+  s: number,
+  e: number,
+) {
+  'worklet';
+  const m = e - s;
+  if (m <= 0) {
+    return;
+  }
+  path.moveTo(xs[s], ys[s]);
+  if (m === 1) {
+    // A lone cell: a zero-length subpath renders as a dot under a round cap.
+    path.lineTo(xs[s], ys[s]);
+    return;
+  }
+  if (m === 2) {
+    path.lineTo(xs[s + 1], ys[s + 1]);
+    return;
+  }
+  // Curve through the midpoints, using each interior point as the control.
+  for (let i = s + 1; i < e - 2; i++) {
+    const xc = (xs[i] + xs[i + 1]) / 2;
+    const yc = (ys[i] + ys[i + 1]) / 2;
+    path.quadTo(xs[i], ys[i], xc, yc);
+  }
+  path.quadTo(xs[e - 2], ys[e - 2], xs[e - 1], ys[e - 1]);
+}
+
+/**
+ * Build the snake body as a smooth spline through the interpolated centers of its
+ * cells, head-first. Drawn STROKED (thick, round/bevel join) this reads as one
+ * continuous creature that curves through turns. The points are split into runs
+ * wherever two consecutive centers are far apart in pixels (a PORTAL wrap), and
+ * each run is smoothed independently so the tube never streaks across the board.
+ * UI-thread worklet; pure.
  */
 function buildTubePath(
   from: Cell[],
@@ -21,29 +58,32 @@ function buildTubePath(
 ) {
   'worklet';
   const path = Skia.Path.Make();
-  // A real step covers ~1 cell; anything bigger is a wrap/snap → break the tube.
-  const breakSq = (cellSize * 1.5) * (cellSize * 1.5);
-  let prevX = 0;
-  let prevY = 0;
-  let started = false;
-  for (let i = 0; i < to.length; i++) {
+  const n = to.length;
+  if (n === 0) {
+    return path;
+  }
+  // Interpolated pixel centers.
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i < n; i++) {
     const c = interpCell(segmentFrom(from, to[i], i), to[i], t);
-    const x = origin.x + (c.x + 0.5) * cellSize;
-    const y = origin.y + (c.y + 0.5) * cellSize;
-    if (!started) {
-      path.moveTo(x, y);
-      started = true;
-    } else {
-      const dx = x - prevX;
-      const dy = y - prevY;
-      if (dx * dx + dy * dy > breakSq) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+    xs.push(origin.x + (c.x + 0.5) * cellSize);
+    ys.push(origin.y + (c.y + 0.5) * cellSize);
+  }
+  // Split into contiguous runs, breaking where a step jumps more than ~1.5 cells
+  // (a wrap), and smooth each run on its own.
+  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
+  let runStart = 0;
+  for (let i = 1; i <= n; i++) {
+    const wrap =
+      i < n &&
+      (xs[i] - xs[i - 1]) * (xs[i] - xs[i - 1]) +
+        (ys[i] - ys[i - 1]) * (ys[i] - ys[i - 1]) >
+        breakSq;
+    if (i === n || wrap) {
+      appendSmoothRun(path, xs, ys, runStart, i);
+      runStart = i;
     }
-    prevX = x;
-    prevY = y;
   }
   return path;
 }

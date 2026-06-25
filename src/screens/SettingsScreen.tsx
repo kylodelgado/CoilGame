@@ -15,6 +15,7 @@ import type { ControlScheme } from '../engine/types';
 const CONTROL_OPTIONS: ReadonlyArray<readonly [ControlScheme, string]> = [
   ['SWIPE', 'Swipe'],
   ['DPAD', 'D-pad'],
+  ['ANALOG', 'Analog'],
 ];
 
 interface SettingsScreenProps {

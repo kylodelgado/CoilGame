@@ -38,6 +38,7 @@ import { GpsArrow } from '../render/GpsArrow';
 import { computeViewport } from '../render/camera';
 import { SwipeInput } from '../input/SwipeInput';
 import { DpadInput } from '../input/DpadInput';
+import { AnalogInput } from '../input/AnalogInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
 import { createExpoHaptics, type HapticsPort } from '../services/HapticsPort';
 import { createSilentSound, type SoundPort } from '../services/SoundPort';
@@ -372,6 +373,7 @@ export function GameScreen(props: GameScreenProps = {}) {
           </>
         )}
         {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
+        {controlScheme === 'ANALOG' && <AnalogInput onDirection={onSwipe} />}
 
         {/* Flashes "what it does" when a powerup is grabbed. */}
         <PickupBanner pickup={pickupBanner} />

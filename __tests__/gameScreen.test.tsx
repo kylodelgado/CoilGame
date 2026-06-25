@@ -265,6 +265,18 @@ describe('GameScreen integration', () => {
 
       expect(screen.queryByTestId('dpad-up')).toBeNull();
     });
+
+    it('with controlScheme ANALOG, the joystick surface is rendered (no D-pad)', () => {
+      useSettingsStore.setState({ controlScheme: 'ANALOG' });
+      const mode = scriptedMode([
+        { state: baseState({ status: 'RUNNING', snake: SNAKE }), events: [] },
+      ]);
+      renderGame(mode);
+      startRunning();
+
+      expect(screen.getByTestId('analog-surface')).toBeTruthy();
+      expect(screen.queryByTestId('dpad-up')).toBeNull();
+    });
   });
 
   describe('Dynamic Walls routing (Prompt 41)', () => {

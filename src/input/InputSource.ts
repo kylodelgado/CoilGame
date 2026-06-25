@@ -23,6 +23,7 @@ export function translationToDirection(
   dy: number,
   threshold: number = SWIPE_THRESHOLD_PX,
 ): Direction | null {
+  'worklet';
   if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) {
     return null;
   }

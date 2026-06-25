@@ -188,7 +188,7 @@ export interface GameState {
   bustedCells?: Cell[];
 }
 
-export type ControlScheme = 'SWIPE' | 'DPAD';
+export type ControlScheme = 'SWIPE' | 'DPAD' | 'ANALOG';
 
 export interface PersistedSettings {
   presetId: PresetId;

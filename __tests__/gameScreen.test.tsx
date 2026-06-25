@@ -279,6 +279,40 @@ describe('GameScreen integration', () => {
     });
   });
 
+  describe('powerup pickup despawn counter', () => {
+    it('shows whole seconds left above an on-board pickup', () => {
+      const mode = scriptedMode([
+        {
+          state: baseState({
+            status: 'RUNNING',
+            snake: SNAKE,
+            bonusFood: { x: 2, y: 2 },
+            bonusRemaining: 20,
+            tickMs: 200,
+          }),
+          events: [],
+        },
+      ]);
+      renderGame(mode);
+      startRunning();
+      advance(200); // one tick → projection now carries the pickup
+
+      // 20 ticks × 200ms = 4000ms ⇒ 4 seconds.
+      expect(screen.getByTestId('pickup-timer')).toHaveTextContent('4');
+    });
+
+    it('shows no counter when no pickup is on the board', () => {
+      const mode = scriptedMode([
+        { state: baseState({ status: 'RUNNING', snake: SNAKE }), events: [] },
+      ]);
+      renderGame(mode);
+      startRunning();
+      advance(100);
+
+      expect(screen.queryByTestId('pickup-timer')).toBeNull();
+    });
+  });
+
   describe('Dynamic Walls routing (Prompt 41)', () => {
     it('routes through dynamicWallsMode and records the run under the DYNAMIC_WALLS key', () => {
       useSettingsStore.setState({ modeId: 'DYNAMIC_WALLS' });

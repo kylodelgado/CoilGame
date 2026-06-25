@@ -35,7 +35,7 @@ import { DynamicLayer } from '../render/DynamicLayer';
 import { WorldBoard } from '../render/WorldBoard';
 import { WorldDynamicLayer } from '../render/WorldDynamicLayer';
 import { GpsArrow } from '../render/GpsArrow';
-import { computeViewport } from '../render/camera';
+import { computeViewport, worldToScreen } from '../render/camera';
 import { SwipeInput } from '../input/SwipeInput';
 import { DpadInput } from '../input/DpadInput';
 import { AnalogInput } from '../input/AnalogInput';
@@ -73,6 +73,8 @@ interface Projection {
   obstacles: Cell[];
   /** Cells smashed by WALL_BUSTER this tick, for the destruction burst. */
   bustedCells: Cell[];
+  /** Ticks left before the on-board pickup despawns (0 when none present). */
+  bonusRemaining: number;
   score: number;
   /** Current tick interval (ms); drives the snake's sub-tick glide duration. */
   tickMs: number;
@@ -88,6 +90,7 @@ const toProjection = (s: GameState): Projection => ({
   pickupBanner: s.pickupBanner ?? null,
   obstacles: s.obstacles,
   bustedCells: s.bustedCells ?? [],
+  bonusRemaining: s.bonusRemaining,
   score: s.score,
   tickMs: s.tickMs,
 });
@@ -187,6 +190,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     pickupBanner: null,
     obstacles: [],
     bustedCells: [],
+    bonusRemaining: 0,
     score: 0,
     tickMs: config.baseTickMs,
   }));
@@ -285,6 +289,7 @@ export function GameScreen(props: GameScreenProps = {}) {
     pickupBanner,
     obstacles,
     bustedCells,
+    bonusRemaining,
     score,
     tickMs,
   } = projection;
@@ -299,6 +304,31 @@ export function GameScreen(props: GameScreenProps = {}) {
     world !== undefined
       ? computeViewport(head, world, grid.columns, grid.rows)
       : null;
+
+  // Despawn counter for the pickup currently on the board: its pixel position
+  // (centered above the cell) and the whole seconds left before it vanishes.
+  // Shown for every kind while it sits on the grid. (pickup countdown)
+  const pickupCounter = (() => {
+    if (bonusFood === null || bonusRemaining <= 0) {
+      return null;
+    }
+    const cellSize = world ? world.cellSize : grid.cellSize;
+    let cx: number;
+    let topY: number;
+    if (viewport !== null && world !== undefined) {
+      const p = worldToScreen(bonusFood, viewport, cellSize, gridOrigin);
+      if (!p.onScreen) {
+        return null;
+      }
+      cx = p.x + cellSize / 2;
+      topY = p.y;
+    } else {
+      cx = grid.originX + bonusFood.x * cellSize + cellSize / 2;
+      topY = grid.originY + bonusFood.y * cellSize;
+    }
+    const seconds = Math.max(1, Math.ceil((bonusRemaining * tickMs) / 1000));
+    return { cx, topY, seconds };
+  })();
 
   return (
     <View
@@ -328,9 +358,6 @@ export function GameScreen(props: GameScreenProps = {}) {
           <Text style={styles.pauseGlyph}>❚❚</Text>
         </Pressable>
       </View>
-
-      {/* Countdown bars for active timed powerups, just under the score bar. */}
-      <ActiveEffectsHud effects={activeEffects} />
 
       <View testID="game-board" style={styles.board}>
         {viewport !== null && world !== undefined ? (
@@ -374,6 +401,30 @@ export function GameScreen(props: GameScreenProps = {}) {
         )}
         {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
         {controlScheme === 'ANALOG' && <AnalogInput onDirection={onSwipe} />}
+
+        {/* Active-effect countdown bars: an overlay, so they never reflow the
+            board (which would resize/shift the grid). */}
+        <View style={styles.effectsOverlay} pointerEvents="none">
+          <ActiveEffectsHud effects={activeEffects} />
+        </View>
+
+        {/* Despawn counter floating above the on-board pickup. */}
+        {pickupCounter !== null && (
+          <Text
+            testID="pickup-timer"
+            pointerEvents="none"
+            style={[
+              styles.pickupTimer,
+              {
+                left: pickupCounter.cx - 16,
+                top: pickupCounter.topY - 16,
+                color: skin.snakeHead,
+              },
+            ]}
+          >
+            {pickupCounter.seconds}
+          </Text>
+        )}
 
         {/* Flashes "what it does" when a powerup is grabbed. */}
         <PickupBanner pickup={pickupBanner} />
@@ -435,6 +486,19 @@ const styles = StyleSheet.create({
   pauseButton: { padding: 8 },
   pauseGlyph: { color: '#fff', fontSize: 20 },
   board: { flex: 1 },
+  // Floats the active-effect chips over the top of the board so showing/hiding
+  // them never changes the board's height (which would resize the grid).
+  effectsOverlay: { position: 'absolute', top: 6, left: 0, right: 0 },
+  pickupTimer: {
+    position: 'absolute',
+    width: 32,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowRadius: 3,
+  },
   overlay: {
     position: 'absolute',
     top: 0,

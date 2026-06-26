@@ -5,10 +5,12 @@ import { darken, lighten, withAlpha } from './color';
 import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
 
-/** Number of trailing segments that taper + shade into the tail. */
-const TAIL_LEN = 5;
+/** Max trailing cells the taper spans (long snakes). */
+const TAIL_LEN = 6;
+/** Fraction of the snake length the taper spans (short snakes taper less). */
+const TAIL_FRACTION = 0.4;
 /** Width multiplier at the very tip of the tail. */
-const TAIL_MIN = 0.35;
+const TAIL_MIN = 0.4;
 /** Samples (K+1 points) of each segment's quad centerline. */
 const RIBBON_SAMPLES = 8;
 /** Shimmer travel period (ms) and half-window (segments). */
@@ -74,7 +76,11 @@ function appendRoundedPoly(
   path.close();
 }
 
-/** Filled ribbon swept along the smooth quad A→(control C)→B. UI-thread worklet. */
+/**
+ * Filled ribbon swept along the smooth quad A→(control C)→B, with the half-width
+ * interpolating from hwStart (at A) to hwEnd (at B) so the segment tapers within
+ * itself. UI-thread worklet.
+ */
 function appendSmoothRibbon(
   path: ReturnType<typeof Skia.Path.Make>,
   ax: number,
@@ -83,7 +89,8 @@ function appendSmoothRibbon(
   cy: number,
   bx: number,
   by: number,
-  hw: number,
+  hwStart: number,
+  hwEnd: number,
   r: number,
 ) {
   'worklet';
@@ -93,6 +100,7 @@ function appendSmoothRibbon(
   const ry: number[] = [];
   for (let k = 0; k <= RIBBON_SAMPLES; k++) {
     const u = k / RIBBON_SAMPLES;
+    const hw = hwStart + (hwEnd - hwStart) * u;
     const mu = 1 - u;
     const x = mu * mu * ax + 2 * mu * u * cx + u * u * bx;
     const y = mu * mu * ay + 2 * mu * u * cy + u * u * by;
@@ -124,14 +132,15 @@ function appendSegmentAt(
   origin: { x: number; y: number },
   cellSize: number,
   gap: number,
-  hw: number,
+  hwStart: number,
+  hwEnd: number,
   rounded: boolean,
 ) {
   'worklet';
   const breakSq = cellSize * 1.5 * (cellSize * 1.5);
   const half = gap / 2;
   const span = cellSize / 2 - half;
-  const r = rounded ? Math.min(hw, cellSize / 4) : 0;
+  const r = rounded ? Math.min(hwStart, hwEnd, cellSize / 4) : 0;
   const [cx, cy] = center(from, to, t, i, origin, cellSize);
 
   let prevX = cx;
@@ -158,6 +167,7 @@ function appendSegmentAt(
   }
 
   if (!hasPrev && !hasNext) {
+    const hw = (hwStart + hwEnd) / 2;
     appendRoundedPoly(
       path,
       [cx - hw, cx + hw, cx + hw, cx - hw],
@@ -202,16 +212,44 @@ function appendSegmentAt(
     bx = cx + (dx / l) * span;
     by = cy + (dy / l) * span;
   }
-  appendSmoothRibbon(path, ax, ay, cx, cy, bx, by, hw, r);
+  appendSmoothRibbon(path, ax, ay, cx, cy, bx, by, hwStart, hwEnd, r);
 }
 
-/** Width scale for cell i: 1 in the body, tapering to TAIL_MIN over the tail. */
-function tailScale(i: number, tailStart: number, tailLen: number): number {
+/**
+ * How many trailing cells the taper spans for a snake of length n. Always at
+ * least one once there is a body cell to taper (so the tail shows even on the
+ * 3-cell starting snake), growing with length up to TAIL_LEN.
+ */
+function taperCellsFor(n: number): number {
   'worklet';
-  if (i < tailStart || tailLen <= 0) {
+  if (n < 2) {
+    return 0;
+  }
+  return Math.max(1, Math.min(TAIL_LEN, Math.floor((n - 1) * TAIL_FRACTION)));
+}
+
+/**
+ * Continuous width multiplier at centerline position `pos` (in cell-index units;
+ * the tail tip is at n-0.5). Full (1) until the taper region, then eases down to
+ * TAIL_MIN at the tip. Evaluated at each segment's two ends so the segment tapers
+ * within itself and joins its neighbors seamlessly (a smooth cone, no steps).
+ */
+function widthFactor(pos: number, n: number, taperCells: number): number {
+  'worklet';
+  if (taperCells <= 0) {
     return 1;
   }
-  return 1 - (1 - TAIL_MIN) * ((i - tailStart + 1) / tailLen);
+  const tipPos = n - 0.5;
+  const startPos = tipPos - taperCells;
+  if (pos <= startPos) {
+    return 1;
+  }
+  let x = (pos - startPos) / taperCells;
+  if (x > 1) {
+    x = 1;
+  }
+  // Ease-in (x^2): stays near full through the body, narrows toward the tip.
+  return 1 - (1 - TAIL_MIN) * x * x;
 }
 
 /**
@@ -236,8 +274,8 @@ function buildTaperedGroup(
     return path;
   }
   const baseHw = (cellSize - gap) / 2;
-  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
-  const tailStart = n - tailLen;
+  const taperCells = taperCellsFor(n);
+  const tailStart = n - taperCells; // body/tail color boundary
   let begin = 0;
   let end = 0;
   if (which === 0) {
@@ -251,8 +289,9 @@ function buildTaperedGroup(
     end = n;
   }
   for (let i = begin; i < end; i++) {
-    const hw = baseHw * tailScale(i, tailStart, tailLen);
-    appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hw, rounded);
+    const hwStart = baseHw * widthFactor(i - 0.5, n, taperCells);
+    const hwEnd = baseHw * widthFactor(i + 0.5, n, taperCells);
+    appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hwStart, hwEnd, rounded);
   }
   return path;
 }
@@ -271,8 +310,7 @@ function buildScales(
   const n = to.length;
   const breakSq = cellSize * 1.5 * (cellSize * 1.5);
   const baseHw = (cellSize - gap) / 2;
-  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
-  const tailStart = n - tailLen;
+  const taperCells = taperCellsFor(n);
   const depth = cellSize * 0.18;
   for (let i = 1; i < n; i++) {
     const [cx, cy] = center(from, to, t, i, origin, cellSize);
@@ -289,7 +327,7 @@ function buildScales(
     const dl = Math.sqrt(dx * dx + dy * dy) || 1;
     const ux = dx / dl;
     const uy = dy / dl;
-    const w = baseHw * tailScale(i, tailStart, tailLen) * 0.62;
+    const w = baseHw * widthFactor(i, n, taperCells) * 0.62;
     const px = -uy;
     const py = ux;
     const tipx = cx + ux * depth;
@@ -319,14 +357,14 @@ function buildShimmer(
     return path;
   }
   const baseHw = (cellSize - gap) / 2;
-  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
-  const tailStart = n - tailLen;
+  const taperCells = taperCellsFor(n);
   const phase = (clockVal % SHIMMER_PERIOD) / SHIMMER_PERIOD;
   const centerIdx = phase * (n + 4) - 2;
   for (let i = 0; i < n; i++) {
     if (Math.abs(i - centerIdx) < SHIMMER_HALF) {
-      const hw = baseHw * tailScale(i, tailStart, tailLen);
-      appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hw, rounded);
+      const hwStart = baseHw * widthFactor(i - 0.5, n, taperCells);
+      const hwEnd = baseHw * widthFactor(i + 0.5, n, taperCells);
+      appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hwStart, hwEnd, rounded);
     }
   }
   return path;

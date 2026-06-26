@@ -101,7 +101,10 @@ describe('GameScreen integration', () => {
     expect(screen.getByTestId('tap-to-start-overlay')).toBeOnTheScreen();
     expect(screen.getByTestId('score-hud')).toHaveTextContent('0');
     // Speed starts at the base pace: exactly 1.0× before any acceleration.
-    expect(screen.getByTestId('speed-hud')).toHaveTextContent('1.0×');
+    // Speed gauge starts empty (0%) at the base pace.
+    expect(screen.getByTestId('speed-gauge').props.accessibilityLabel).toBe(
+      'Speed 0 percent',
+    );
 
     fireEvent.press(screen.getByTestId('tap-to-start-overlay'));
     expect(screen.getByTestId('countdown-overlay')).toBeOnTheScreen();

@@ -27,6 +27,8 @@ interface DynamicLayerProps {
   bustedCells?: Cell[];
   /** Kind grabbed this tick (one-shot); bursts a pickup effect at the head. */
   pickupBanner?: PowerupKind | null;
+  /** Speed fraction 0→1; drives the snake's speed glow. */
+  glow?: number;
   /** Bump to snap the snake (no glide) after a restart/reset. */
   resetKey?: number | string;
 }
@@ -52,6 +54,7 @@ export function DynamicLayer({
   obstacles = [],
   bustedCells = EMPTY_CELLS,
   pickupBanner = null,
+  glow = 0,
   resetKey,
 }: DynamicLayerProps) {
   const skin = useSkin();
@@ -139,6 +142,7 @@ export function DynamicLayer({
         render={skin.snakeRender}
         effect={snakeEffect}
         boardHeight={gridSpec.rows * gridSpec.cellSize}
+        glow={glow}
         headColor={skin.snakeHead}
         bodyColor={skin.snakeBody}
       />

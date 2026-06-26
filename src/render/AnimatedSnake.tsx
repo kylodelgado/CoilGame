@@ -1,7 +1,7 @@
-import { LinearGradient, Path, Skia, vec } from '@shopify/react-native-skia';
+import { LinearGradient, Path, Shadow, Skia, vec } from '@shopify/react-native-skia';
 import { useDerivedValue } from 'react-native-reanimated';
 import type { Cell, SnakeEffect } from '../engine/types';
-import { darken, lighten, withAlpha } from './color';
+import { darken, lighten, mix, withAlpha } from './color';
 import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
 
@@ -9,8 +9,8 @@ import type { SnakeGlide } from './useSnakeGlide';
 const TAIL_LEN = 6;
 /** Fraction of the snake length the taper spans (short snakes taper less). */
 const TAIL_FRACTION = 0.4;
-/** Width multiplier at the very tip of the tail. */
-const TAIL_MIN = 0.4;
+/** Width multiplier at the very tip of the tail (lower = pointier). */
+const TAIL_MIN = 0.26;
 /** Samples (K+1 points) of each segment's quad centerline. */
 const RIBBON_SAMPLES = 8;
 /** Shimmer travel period (ms) and half-window (segments). */
@@ -413,9 +413,14 @@ interface AnimatedSnakeProps {
   effect: SnakeEffect;
   /** Visible board height (px) for the top-lit gloss gradient. */
   boardHeight: number;
+  /** Speed fraction 0→1; the snake heats up and glows brighter as it climbs. */
+  glow: number;
   headColor: string;
   bodyColor: string;
 }
+
+/** When the speed glow starts ramping in (fraction of the speed range). */
+const GLOW_START = 0.3;
 
 /**
  * Continuous-glide snake renderer. The body is a chain of independent segments
@@ -435,6 +440,7 @@ export function AnimatedSnake({
   render,
   effect,
   boardHeight,
+  glow,
   headColor,
   bodyColor,
 }: AnimatedSnakeProps) {
@@ -444,6 +450,19 @@ export function AnimatedSnake({
   const inset = gap / 2;
   const size = cellSize - gap;
   const corner = rounded ? cellSize / 4 : 0;
+
+  // Speed glow: ramps in past GLOW_START, heating from the head color toward hot
+  // orange and growing its blur halo as the snake nears top speed.
+  const glowAmt = Math.max(0, Math.min(1, (glow - GLOW_START) / (1 - GLOW_START)));
+  const glowNode =
+    glowAmt > 0.01 ? (
+      <Shadow
+        dx={0}
+        dy={0}
+        blur={glowAmt * cellSize * 0.75}
+        color={withAlpha(mix(headColor, '#FF5A1A', glowAmt), 0.85 * glowAmt)}
+      />
+    ) : null;
 
   // Derived shades (JS thread).
   const tailColor = darken(bodyColor, 0.34);
@@ -491,12 +510,16 @@ export function AnimatedSnake({
     return Skia.Path.Make();
   });
 
-  // Segments (retro) mode: plain body + head, no taper/effects.
+  // Segments (retro) mode: plain body + head (glow still applies), no taper/fx.
   if (!wrapped) {
     return (
       <>
-        <Path path={bodyPath} color={bodyColor} />
-        <Path path={headPath} color={headColor} />
+        <Path path={bodyPath} color={bodyColor}>
+          {glowNode}
+        </Path>
+        <Path path={headPath} color={headColor}>
+          {glowNode}
+        </Path>
       </>
     );
   }
@@ -509,6 +532,7 @@ export function AnimatedSnake({
     if (effect === 'gloss') {
       return (
         <Path key={key} path={p}>
+          {glowNode}
           <LinearGradient
             start={vec(0, gy0)}
             end={vec(0, gy1)}
@@ -517,7 +541,11 @@ export function AnimatedSnake({
         </Path>
       );
     }
-    return <Path key={key} path={p} color={color} />;
+    return (
+      <Path key={key} path={p} color={color}>
+        {glowNode}
+      </Path>
+    );
   };
 
   const outlineWidth = Math.max(1.5, cellSize * 0.07);

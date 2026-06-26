@@ -34,6 +34,8 @@ interface WorldDynamicLayerProps {
   bustedCells?: Cell[];
   /** Kind grabbed this tick (one-shot); bursts a pickup effect at the head. */
   pickupBanner?: PowerupKind | null;
+  /** Speed fraction 0→1; drives the snake's speed glow. */
+  glow?: number;
   /** Current tick interval (ms); the snake/camera sub-tick glide duration. */
   tickMs?: number;
 }
@@ -63,6 +65,7 @@ export function WorldDynamicLayer({
   obstacles = [],
   bustedCells = EMPTY_CELLS,
   pickupBanner = null,
+  glow = 0,
   tickMs = 150,
 }: WorldDynamicLayerProps) {
   const skin = useSkin();
@@ -205,6 +208,7 @@ export function WorldDynamicLayer({
           render={skin.snakeRender}
           effect={snakeEffect}
           boardHeight={viewport.rows * cellSize}
+          glow={glow}
           headColor={skin.snakeHead}
           bodyColor={skin.snakeBody}
         />

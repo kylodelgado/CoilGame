@@ -103,7 +103,7 @@ describe('tick (FR-S1, FR-D1/2/3, FR-F3/4, FR-SC1)', () => {
     expect(next.snake[0]).toEqual({ x: 4, y: 3 });
     expect(next.score).toBe(10);
     expect(next.foodEaten).toBe(1);
-    expect(next.tickMs).toBe(196); // 200 - 4*1
+    expect(next.tickMs).toBeCloseTo(196, 0); // ≈ base - accel at the first food
     expect(next.tickMs).toBeLessThan(state.tickMs);
     expect(next.food).not.toBeNull();
     const occupied = new Set(next.snake.map(key));
@@ -281,7 +281,9 @@ describe('tick (FR-S1, FR-D1/2/3, FR-F3/4, FR-SC1)', () => {
     });
     const { state: next } = tick(state, config, rng());
     expect(next.foodEaten).toBe(101);
-    expect(next.tickMs).toBe(config.minTickMs); // clamped, not 200 - 404
+    // Eased toward the floor and never below it (asymptotic, not a hard clamp).
+    expect(next.tickMs).toBeGreaterThanOrEqual(config.minTickMs);
+    expect(next.tickMs).toBeLessThan(config.baseTickMs);
   });
 
   it('does nothing meaningful when not RUNNING', () => {

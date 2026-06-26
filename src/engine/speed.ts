@@ -1,7 +1,14 @@
 /**
- * Speed/acceleration curve. The tick interval shrinks by accelMsPerFood for
- * every food eaten, clamped so it never drops below minTickMs. Monotonic
- * non-increasing in foodEaten. Pure, no side effects. (FR-S2)
+ * Speed/acceleration curve. The tick interval eases from baseTickMs toward
+ * minTickMs as food is eaten, following an exponential approach:
+ *
+ *   tickMs = min + (base - min) * exp(-accel * foodEaten / (base - min))
+ *
+ * The initial slope is exactly accelMsPerFood (so a single food still speeds you
+ * up by ~that much at the start), but instead of snapping into the floor after a
+ * fixed count, it approaches max speed gradually and never quite hits it — so
+ * acceleration feels steady and the run never plateaus abruptly. Monotonic
+ * non-increasing in foodEaten, always >= minTickMs. Pure. (FR-S2)
  */
 export function computeTickMs(
   baseTickMs: number,
@@ -9,7 +16,12 @@ export function computeTickMs(
   accelMsPerFood: number,
   foodEaten: number,
 ): number {
-  return Math.max(minTickMs, baseTickMs - accelMsPerFood * foodEaten);
+  const range = baseTickMs - minTickMs;
+  if (range <= 0) {
+    return minTickMs;
+  }
+  const eased = minTickMs + range * Math.exp((-accelMsPerFood * foodEaten) / range);
+  return Math.max(minTickMs, eased);
 }
 
 /**

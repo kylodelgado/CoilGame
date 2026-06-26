@@ -54,6 +54,7 @@ import { useSkin } from '../skins/SkinProvider';
 import { PauseOverlay } from './PauseOverlay';
 import { ActiveEffectsHud } from './ActiveEffectsHud';
 import { PickupBanner } from './PickupBanner';
+import { SpeedGauge } from './SpeedGauge';
 
 const SCORE_BAR_HEIGHT = 64;
 const COUNTDOWN_SECONDS = 3;
@@ -293,8 +294,14 @@ export function GameScreen(props: GameScreenProps = {}) {
     score,
     tickMs,
   } = projection;
-  // Player-facing speed, relative to this preset's starting pace (1.0× → cap).
+  // Player-facing speed: a 0→1 fraction of the run's speed range (start → cap),
+  // driving both the HUD gauge and the snake's speed glow.
+  const maxMultiplier = computeSpeedMultiplier(config.baseTickMs, config.minTickMs);
   const speedMultiplier = computeSpeedMultiplier(config.baseTickMs, tickMs);
+  const speedFraction =
+    maxMultiplier > 1
+      ? Math.max(0, Math.min(1, (speedMultiplier - 1) / (maxMultiplier - 1)))
+      : 0;
 
   // GPS render path: a camera window of the world that follows the snake's head.
   const world = config.world;
@@ -341,13 +348,7 @@ export function GameScreen(props: GameScreenProps = {}) {
         <Text testID="score-hud" style={[styles.score, { color: skin.snakeHead }]}>
           {score}
         </Text>
-        <Text
-          testID="speed-hud"
-          accessibilityLabel={`Speed ${speedMultiplier.toFixed(1)} times`}
-          style={[styles.speed, { color: skin.snakeBody }]}
-        >
-          {speedMultiplier.toFixed(1)}×
-        </Text>
+        <SpeedGauge fraction={speedFraction} coolColor={skin.snakeHead} />
         <Pressable
           testID="pause-button"
           accessibilityRole="button"
@@ -380,6 +381,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               bustedCells={bustedCells}
               pickupBanner={pickupBanner}
               tickMs={tickMs}
+              glow={speedFraction}
             />
             <GpsArrow head={head} food={food} viewport={viewport} />
           </>
@@ -396,6 +398,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               obstacles={obstacles}
               bustedCells={bustedCells}
               pickupBanner={pickupBanner}
+              glow={speedFraction}
             />
           </>
         )}
@@ -482,7 +485,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   score: { fontSize: 28, fontWeight: '800' },
-  speed: { fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] },
   pauseButton: { padding: 8 },
   pauseGlyph: { color: '#fff', fontSize: 20 },
   board: { flex: 1 },

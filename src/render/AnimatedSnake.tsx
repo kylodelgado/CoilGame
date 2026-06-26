@@ -4,121 +4,235 @@ import type { Cell } from '../engine/types';
 import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
 
+/** Interpolated pixel center of snake cell i. */
+function center(
+  from: Cell[],
+  to: Cell[],
+  t: number,
+  i: number,
+  origin: { x: number; y: number },
+  cellSize: number,
+): [number, number] {
+  'worklet';
+  const c = interpCell(segmentFrom(from, to[i], i), to[i], t);
+  return [origin.x + (c.x + 0.5) * cellSize, origin.y + (c.y + 0.5) * cellSize];
+}
+
 /**
- * Append a SMOOTH curve through pts[s..e) to the path: each interior point is a
- * quadratic control point and the curve passes through the midpoints between
- * consecutive points, so the body genuinely bends through corners (a slither)
- * rather than making a hard L. Straight runs stay straight. UI-thread worklet.
+ * Append a closed polygon (count vertices) to the path, rounding each vertex by
+ * radius r (clamped to half the adjacent edges) via a quad through the vertex.
+ * r <= 0 draws sharp corners. UI-thread worklet.
  */
-function appendSmoothRun(
+function appendRoundedPoly(
   path: ReturnType<typeof Skia.Path.Make>,
   xs: number[],
   ys: number[],
-  s: number,
-  e: number,
+  count: number,
+  r: number,
 ) {
   'worklet';
-  const m = e - s;
-  if (m <= 0) {
+  if (count < 3) {
     return;
   }
-  path.moveTo(xs[s], ys[s]);
-  if (m === 1) {
-    // A lone cell: a zero-length subpath renders as a dot under a round cap.
-    path.lineTo(xs[s], ys[s]);
+  if (r <= 0) {
+    path.moveTo(xs[0], ys[0]);
+    for (let k = 1; k < count; k++) {
+      path.lineTo(xs[k], ys[k]);
+    }
+    path.close();
     return;
   }
-  if (m === 2) {
-    path.lineTo(xs[s + 1], ys[s + 1]);
-    return;
+  for (let k = 0; k < count; k++) {
+    const cx = xs[k];
+    const cy = ys[k];
+    const px = xs[(k - 1 + count) % count];
+    const py = ys[(k - 1 + count) % count];
+    const nx = xs[(k + 1) % count];
+    const ny = ys[(k + 1) % count];
+    const inDx = cx - px;
+    const inDy = cy - py;
+    const inLen = Math.sqrt(inDx * inDx + inDy * inDy) || 1;
+    const ri = Math.min(r, inLen / 2);
+    const outDx = nx - cx;
+    const outDy = ny - cy;
+    const outLen = Math.sqrt(outDx * outDx + outDy * outDy) || 1;
+    const ro = Math.min(r, outLen / 2);
+    if (k === 0) {
+      path.moveTo(cx - (inDx / inLen) * ri, cy - (inDy / inLen) * ri);
+    } else {
+      path.lineTo(cx - (inDx / inLen) * ri, cy - (inDy / inLen) * ri);
+    }
+    path.quadTo(cx, cy, cx + (outDx / outLen) * ro, cy + (outDy / outLen) * ro);
   }
-  // Curve through the midpoints, using each interior point as the control.
-  for (let i = s + 1; i < e - 2; i++) {
-    const xc = (xs[i] + xs[i + 1]) / 2;
-    const yc = (ys[i] + ys[i + 1]) / 2;
-    path.quadTo(xs[i], ys[i], xc, yc);
+  path.close();
+}
+
+/** Samples (K+1 points) of the quad A→(control C)→B. */
+const RIBBON_SAMPLES = 8;
+
+/**
+ * Append one body segment as a filled ribbon swept along a SMOOTH quadratic
+ * centerline A→(control C)→B. The curve is sampled finely and offset by ±hw
+ * along its tangent normal, so the sides are smooth (not angular) and a turn
+ * makes the outer edge run long while the inner edge pulls in — the segment
+ * wraps the corner, squeezing inside / stretching outside, automatically per
+ * turn direction. Ends are rounded within bounds (gaps preserved). UI-thread
+ * worklet.
+ */
+function appendSmoothRibbon(
+  path: ReturnType<typeof Skia.Path.Make>,
+  ax: number,
+  ay: number,
+  cx: number,
+  cy: number,
+  bx: number,
+  by: number,
+  hw: number,
+  r: number,
+) {
+  'worklet';
+  const leftX: number[] = [];
+  const leftY: number[] = [];
+  const rightX: number[] = [];
+  const rightY: number[] = [];
+  for (let k = 0; k <= RIBBON_SAMPLES; k++) {
+    const u = k / RIBBON_SAMPLES;
+    const mu = 1 - u;
+    const x = mu * mu * ax + 2 * mu * u * cx + u * u * bx;
+    const y = mu * mu * ay + 2 * mu * u * cy + u * u * by;
+    const tx = 2 * mu * (cx - ax) + 2 * u * (bx - cx);
+    const ty = 2 * mu * (cy - ay) + 2 * u * (by - cy);
+    const tl = Math.sqrt(tx * tx + ty * ty) || 1;
+    const nx = (-ty / tl) * hw;
+    const ny = (tx / tl) * hw;
+    leftX.push(x + nx);
+    leftY.push(y + ny);
+    rightX.push(x - nx);
+    rightY.push(y - ny);
   }
-  path.quadTo(xs[e - 2], ys[e - 2], xs[e - 1], ys[e - 1]);
+  // Outline: left edge forward, then right edge backward.
+  const polyX: number[] = [];
+  const polyY: number[] = [];
+  for (let k = 0; k <= RIBBON_SAMPLES; k++) {
+    polyX.push(leftX[k]);
+    polyY.push(leftY[k]);
+  }
+  for (let k = RIBBON_SAMPLES; k >= 0; k--) {
+    polyX.push(rightX[k]);
+    polyY.push(rightY[k]);
+  }
+  appendRoundedPoly(path, polyX, polyY, polyX.length, r);
 }
 
 /**
- * Build the snake body as a smooth spline through the interpolated centers of its
- * cells, head-first. Drawn STROKED (thick, round/bevel join) this reads as one
- * continuous creature that curves through turns. The points are split into runs
- * wherever two consecutive centers are far apart in pixels (a PORTAL wrap), and
- * each run is smoothed independently so the tube never streaks across the board.
- * UI-thread worklet; pure.
+ * Build the snake as a chain of INDEPENDENT segments that wrap around corners:
+ * one smooth ribbon per cell along its bent centerline (inset for a gap), so
+ * segments rotate and squeeze inside / stretch outside each turn. The head and
+ * tail synthesize their open end half a cell along the heading so they stay
+ * full-length. Wrap seams break the neighbor links. UI-thread worklet; pure.
  */
-function buildTubePath(
+function buildWrappedSegments(
   from: Cell[],
   to: Cell[],
   t: number,
+  begin: number,
+  end: number,
   origin: { x: number; y: number },
   cellSize: number,
-) {
-  'worklet';
-  const path = Skia.Path.Make();
-  const n = to.length;
-  if (n === 0) {
-    return path;
-  }
-  // Interpolated pixel centers.
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const c = interpCell(segmentFrom(from, to[i], i), to[i], t);
-    xs.push(origin.x + (c.x + 0.5) * cellSize);
-    ys.push(origin.y + (c.y + 0.5) * cellSize);
-  }
-  // Split into contiguous runs, breaking where a step jumps more than ~1.5 cells
-  // (a wrap), and smooth each run on its own.
-  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
-  let runStart = 0;
-  for (let i = 1; i <= n; i++) {
-    const wrap =
-      i < n &&
-      (xs[i] - xs[i - 1]) * (xs[i] - xs[i - 1]) +
-        (ys[i] - ys[i - 1]) * (ys[i] - ys[i - 1]) >
-        breakSq;
-    if (i === n || wrap) {
-      appendSmoothRun(path, xs, ys, runStart, i);
-      runStart = i;
-    }
-  }
-  return path;
-}
-
-/** A filled head cap (circle or square) at the interpolated head center. */
-function buildHeadPath(
-  from: Cell[],
-  to: Cell[],
-  t: number,
-  origin: { x: number; y: number },
-  cellSize: number,
-  radius: number,
+  gap: number,
   rounded: boolean,
 ) {
   'worklet';
   const path = Skia.Path.Make();
-  if (to.length === 0) {
-    return path;
-  }
-  const c = interpCell(segmentFrom(from, to[0], 0), to[0], t);
-  const cx = origin.x + (c.x + 0.5) * cellSize;
-  const cy = origin.y + (c.y + 0.5) * cellSize;
-  if (rounded) {
-    path.addCircle(cx, cy, radius);
-  } else {
-    path.addRect(Skia.XYWHRect(cx - radius, cy - radius, radius * 2, radius * 2));
+  const n = to.length;
+  const stop = Math.min(end, n);
+  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
+  const hw = (cellSize - gap) / 2;
+  const half = gap / 2;
+  const span = cellSize / 2 - half; // half-cell reach for an open (head/tail) end
+  const r = rounded ? Math.min(hw, cellSize / 4) : 0;
+
+  for (let i = begin; i < stop; i++) {
+    const [cx, cy] = center(from, to, t, i, origin, cellSize);
+
+    let prevX = cx;
+    let prevY = cy;
+    let hasPrev = false;
+    if (i > 0) {
+      const [x, y] = center(from, to, t, i - 1, origin, cellSize);
+      if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
+        prevX = x;
+        prevY = y;
+        hasPrev = true;
+      }
+    }
+    let nextX = cx;
+    let nextY = cy;
+    let hasNext = false;
+    if (i < n - 1) {
+      const [x, y] = center(from, to, t, i + 1, origin, cellSize);
+      if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
+        nextX = x;
+        nextY = y;
+        hasNext = true;
+      }
+    }
+
+    if (!hasPrev && !hasNext) {
+      // Lone cell: an axis-aligned rounded square.
+      appendRoundedPoly(
+        path,
+        [cx - hw, cx + hw, cx + hw, cx - hw],
+        [cy - hw, cy - hw, cy + hw, cy + hw],
+        4,
+        r,
+      );
+      continue;
+    }
+
+    // End A: midpoint toward prev (inset), or a synthesized nose for the head.
+    let ax: number;
+    let ay: number;
+    if (hasPrev) {
+      const mx = (prevX + cx) / 2;
+      const my = (prevY + cy) / 2;
+      const dx = cx - mx;
+      const dy = cy - my;
+      const l = Math.sqrt(dx * dx + dy * dy) || 1;
+      ax = mx + (dx / l) * half;
+      ay = my + (dy / l) * half;
+    } else {
+      const dx = cx - nextX;
+      const dy = cy - nextY;
+      const l = Math.sqrt(dx * dx + dy * dy) || 1;
+      ax = cx + (dx / l) * span;
+      ay = cy + (dy / l) * span;
+    }
+    // End B: midpoint toward next (inset), or a synthesized tail tip.
+    let bx: number;
+    let by: number;
+    if (hasNext) {
+      const mx = (cx + nextX) / 2;
+      const my = (cy + nextY) / 2;
+      const dx = cx - mx;
+      const dy = cy - my;
+      const l = Math.sqrt(dx * dx + dy * dy) || 1;
+      bx = mx + (dx / l) * half;
+      by = my + (dy / l) * half;
+    } else {
+      const dx = cx - prevX;
+      const dy = cy - prevY;
+      const l = Math.sqrt(dx * dx + dy * dy) || 1;
+      bx = cx + (dx / l) * span;
+      by = cy + (dy / l) * span;
+    }
+
+    appendSmoothRibbon(path, ax, ay, cx, cy, bx, by, hw, r);
   }
   return path;
 }
 
-/**
- * Build the snake as discrete rounded-rect cells over [begin,end) — the classic
- * blocky look, each cell inset by the gap so neighbors read as separate segments.
- * Each cell is independent, so wraps need no special handling. UI-thread worklet.
- */
+/** Axis-aligned discrete rounded-rect cells over [begin,end) — the retro look. */
 function buildSegmentsPath(
   from: Cell[],
   to: Cell[],
@@ -153,17 +267,14 @@ interface AnimatedSnakeProps {
   glide: SnakeGlide;
   /** Cell pitch in pixels. */
   cellSize: number;
-  /**
-   * Absolute pixel origin for cell (0,0). For Classic this is the grid origin;
-   * for GPS it is the world origin and a parent <Group> applies the camera pan,
-   * so the snake is always drawn at absolute world-pixel coordinates here.
-   */
+  /** Absolute pixel origin for cell (0,0). */
   origin: { x: number; y: number };
-  /** Inter-cell channel; the tube is `cellSize - gap` thick / segments inset by gap. */
+  /** Inter-cell channel; segments are inset by this so they read as separate. */
   gap: number;
-  /** Rounded vs square cells (mirrors skin.cellShape) — sets joins/caps. */
+  /** Rounded vs square cells (mirrors skin.cellShape). */
   rounded: boolean;
-  /** 'tube' = continuous stroked body; 'segments' = discrete rounded cells. */
+  /** 'tube' = independent segments that wrap around corners; 'segments' =
+   * axis-aligned discrete cells (the retro look). */
   render: 'tube' | 'segments';
   headColor: string;
   bodyColor: string;
@@ -172,12 +283,13 @@ interface AnimatedSnakeProps {
 /**
  * Continuous-glide snake renderer. The engine stays discrete (one cell/tick);
  * this draws the in-between frames by interpolating each segment from its
- * previous grid cell to its current one. The skin chooses the look: 'tube'
- * renders the whole body as one stroked path (a flowing tube with rounded
- * corners) plus a brighter head cap; 'segments' renders discrete rounded cells
- * with a gap (the classic blocky snake). Two derived values keep the hook count
- * fixed for any length and rebuild every frame on the UI thread via the glide's
- * Reanimated clock. A pure projection of the glide state. (smooth movement)
+ * previous grid cell to its current one. Both looks are a chain of INDEPENDENT
+ * per-cell segments: 'tube' draws each as a ribbon along its bent centerline so
+ * it rotates and squeezes-inside / stretches-outside around turns (a dynamic
+ * wrap); 'segments' keeps them axis-aligned (retro). The head is simply the first
+ * segment in the head color. Two derived values keep the hook count fixed for any
+ * length and rebuild every frame on the UI thread via the glide's Reanimated
+ * clock. A pure projection of the glide state. (smooth movement)
  */
 export function AnimatedSnake({
   glide,
@@ -190,9 +302,9 @@ export function AnimatedSnake({
   bodyColor,
 }: AnimatedSnakeProps) {
   const { clock, from, to, start, duration } = glide;
-  const tube = render === 'tube';
-  const thickness = cellSize - gap;
-  const headRadius = thickness / 2;
+  const wrapped = render === 'tube';
+  // A touch more separation than the raw cell gap so segments read as distinct.
+  const segGap = wrapped ? Math.max(gap, cellSize * 0.12) : gap;
   const inset = gap / 2;
   const size = cellSize - gap;
   const corner = rounded ? cellSize / 4 : 0;
@@ -200,65 +312,32 @@ export function AnimatedSnake({
   const bodyPath = useDerivedValue(() => {
     'worklet';
     const t = clamp01((clock.value - start.value) / duration.value);
-    if (tube) {
-      return buildTubePath(from.value, to.value, t, origin, cellSize);
+    if (wrapped) {
+      return buildWrappedSegments(
+        from.value, to.value, t, 1, to.value.length, origin, cellSize, segGap, rounded,
+      );
     }
     return buildSegmentsPath(
-      from.value,
-      to.value,
-      t,
-      1,
-      to.value.length,
-      origin,
-      cellSize,
-      inset,
-      size,
-      corner,
+      from.value, to.value, t, 1, to.value.length, origin, cellSize, inset, size, corner,
     );
   });
 
   const headPath = useDerivedValue(() => {
     'worklet';
     const t = clamp01((clock.value - start.value) / duration.value);
-    if (tube) {
-      return buildHeadPath(
-        from.value,
-        to.value,
-        t,
-        origin,
-        cellSize,
-        headRadius,
-        rounded,
+    if (wrapped) {
+      return buildWrappedSegments(
+        from.value, to.value, t, 0, 1, origin, cellSize, segGap, rounded,
       );
     }
     return buildSegmentsPath(
-      from.value,
-      to.value,
-      t,
-      0,
-      1,
-      origin,
-      cellSize,
-      inset,
-      size,
-      corner,
+      from.value, to.value, t, 0, 1, origin, cellSize, inset, size, corner,
     );
   });
 
   return (
     <>
-      {tube ? (
-        <Path
-          path={bodyPath}
-          color={bodyColor}
-          style="stroke"
-          strokeWidth={thickness}
-          strokeJoin={rounded ? 'round' : 'bevel'}
-          strokeCap={rounded ? 'round' : 'square'}
-        />
-      ) : (
-        <Path path={bodyPath} color={bodyColor} />
-      )}
+      <Path path={bodyPath} color={bodyColor} />
       <Path path={headPath} color={headColor} />
     </>
   );

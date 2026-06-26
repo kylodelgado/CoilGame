@@ -70,6 +70,8 @@ jest.mock('@shopify/react-native-skia', () => {
     Circle: passthrough(),
     Path: passthrough(),
     Line: passthrough(),
+    LinearGradient: passthrough(),
+    vec: (x, y) => ({ x, y }),
     useClock: () => ({ value: 0 }),
     Skia: {
       Path: { Make: () => fakePath },

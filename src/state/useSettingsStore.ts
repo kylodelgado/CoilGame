@@ -4,6 +4,7 @@ import type {
   ModeId,
   PersistedSettings,
   PresetId,
+  SnakeEffect,
   WallBehavior,
 } from '../engine/types';
 import type { SkinId } from '../skins/registry';
@@ -17,6 +18,8 @@ interface SettingsState {
   skinId: SkinId;
   controlScheme: ControlScheme;
   modeId: ModeId;
+  /** Temporary, non-persisted snake effect selector (compared in Settings). */
+  snakeEffect: SnakeEffect;
   hydrated: boolean;
 
   hydrate(storage: StoragePort): Promise<void>;
@@ -27,6 +30,7 @@ interface SettingsState {
   setSkin(id: SkinId): void;
   setControlScheme(s: ControlScheme): void;
   setMode(id: ModeId): void;
+  setSnakeEffect(e: SnakeEffect): void;
 }
 
 /** The StoragePort injected at hydrate time; setters persist through it. */
@@ -59,6 +63,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
   return {
     ...DEFAULT_SETTINGS,
+    snakeEffect: 'gloss',
     hydrated: false,
 
     async hydrate(storage: StoragePort): Promise<void> {
@@ -100,6 +105,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     setMode(id: ModeId): void {
       set({ modeId: id });
       persist();
+    },
+
+    // Temporary/experimental; intentionally not persisted.
+    setSnakeEffect(e: SnakeEffect): void {
+      set({ snakeEffect: e });
     },
   };
 });

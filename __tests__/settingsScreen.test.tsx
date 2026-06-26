@@ -177,4 +177,20 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
       ).toEqual(expect.objectContaining({ selected: true }));
     });
   });
+
+  describe('Snake FX switcher (temporary)', () => {
+    it('selects an effect into the store and reflects it (not persisted)', () => {
+      renderSettings();
+      fireEvent.press(screen.getByTestId('snake-effect-shimmer'));
+
+      expect(useSettingsStore.getState().snakeEffect).toBe('shimmer');
+      // Temporary/experimental: it does not write to storage.
+      expect(storage.setSettings).not.toHaveBeenCalledWith(
+        expect.objectContaining({ snakeEffect: expect.anything() }),
+      );
+      expect(
+        screen.getByTestId('snake-effect-shimmer').props.accessibilityState,
+      ).toEqual(expect.objectContaining({ selected: true }));
+    });
+  });
 });

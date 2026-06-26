@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import { Canvas, Circle, Rect, RoundedRect } from '@shopify/react-native-skia';
 import type { Cell, GridSpec, PowerupKind } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
+import { useSettingsStore } from '../state/useSettingsStore';
 import { AnimatedSnake } from './AnimatedSnake';
 import { BurstField } from './BurstField';
 import { PowerupGlyph } from './PowerupGlyph';
@@ -54,6 +55,7 @@ export function DynamicLayer({
   resetKey,
 }: DynamicLayerProps) {
   const skin = useSkin();
+  const snakeEffect = useSettingsStore((s) => s.snakeEffect);
   const glide = useSnakeGlide(snake, tickMs, resetKey);
   const corner = skin.cellShape === 'rounded' ? gridSpec.cellSize / 4 : 0;
 
@@ -135,6 +137,8 @@ export function DynamicLayer({
         gap={skin.cellGap}
         rounded={skin.cellShape === 'rounded'}
         render={skin.snakeRender}
+        effect={snakeEffect}
+        boardHeight={gridSpec.rows * gridSpec.cellSize}
         headColor={skin.snakeHead}
         bodyColor={skin.snakeBody}
       />

@@ -9,6 +9,7 @@ import {
 import { useMemo } from 'react';
 import type { Cell, PowerupKind, WorldSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
+import { useSettingsStore } from '../state/useSettingsStore';
 import { AnimatedSnake } from './AnimatedSnake';
 import { BurstField } from './BurstField';
 import { PowerupGlyph } from './PowerupGlyph';
@@ -65,6 +66,7 @@ export function WorldDynamicLayer({
   tickMs = 150,
 }: WorldDynamicLayerProps) {
   const skin = useSkin();
+  const snakeEffect = useSettingsStore((s) => s.snakeEffect);
   const glide = useSnakeGlide(snake, tickMs);
   const camera = useGpsCamera(glide, viewport, world, cellSize);
 
@@ -201,6 +203,8 @@ export function WorldDynamicLayer({
           gap={skin.cellGap}
           rounded={skin.cellShape === 'rounded'}
           render={skin.snakeRender}
+          effect={snakeEffect}
+          boardHeight={viewport.rows * cellSize}
           headColor={skin.snakeHead}
           bodyColor={skin.snakeBody}
         />

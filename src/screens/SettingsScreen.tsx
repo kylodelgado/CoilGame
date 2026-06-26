@@ -10,12 +10,21 @@ import { useSkin, SkinProvider } from '../skins/SkinProvider';
 import { SKIN_IDS, getSkin } from '../skins/registry';
 import { PRESETS } from '../engine/presets';
 import { PresetPreview } from '../render/PresetPreview';
-import type { ControlScheme } from '../engine/types';
+import type { ControlScheme, SnakeEffect } from '../engine/types';
 
 const CONTROL_OPTIONS: ReadonlyArray<readonly [ControlScheme, string]> = [
   ['SWIPE', 'Swipe'],
   ['DPAD', 'D-pad'],
   ['ANALOG', 'Analog'],
+];
+
+// Temporary: compare snake body effects and keep the best.
+const EFFECT_OPTIONS: ReadonlyArray<readonly [SnakeEffect, string]> = [
+  ['none', 'None'],
+  ['gloss', 'Gloss'],
+  ['scales', 'Scales'],
+  ['outline', 'Outline'],
+  ['shimmer', 'Shimmer'],
 ];
 
 interface SettingsScreenProps {
@@ -40,6 +49,8 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const skinId = useSettingsStore((s) => s.skinId);
   const controlScheme = useSettingsStore((s) => s.controlScheme);
+  const snakeEffect = useSettingsStore((s) => s.snakeEffect);
+  const setSnakeEffect = useSettingsStore((s) => s.setSnakeEffect);
   const setSound = useSettingsStore((s) => s.setSound);
   const setHaptics = useSettingsStore((s) => s.setHaptics);
   const setSkin = useSettingsStore((s) => s.setSkin);
@@ -95,6 +106,37 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 onPress={() => setControlScheme(value)}
+                style={[
+                  styles.segmentButton,
+                  selected && { borderColor: skin.snakeHead },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentLabel,
+                    selected && { color: skin.snakeHead },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Snake FX</Text>
+        <View style={styles.segment}>
+          {EFFECT_OPTIONS.map(([value, label]) => {
+            const selected = value === snakeEffect;
+            return (
+              <Pressable
+                key={value}
+                testID={`snake-effect-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setSnakeEffect(value)}
                 style={[
                   styles.segmentButton,
                   selected && { borderColor: skin.snakeHead },

@@ -1,8 +1,19 @@
-import { Path, Skia } from '@shopify/react-native-skia';
+import { LinearGradient, Path, Skia, vec } from '@shopify/react-native-skia';
 import { useDerivedValue } from 'react-native-reanimated';
-import type { Cell } from '../engine/types';
+import type { Cell, SnakeEffect } from '../engine/types';
+import { darken, lighten, withAlpha } from './color';
 import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
+
+/** Number of trailing segments that taper + shade into the tail. */
+const TAIL_LEN = 5;
+/** Width multiplier at the very tip of the tail. */
+const TAIL_MIN = 0.35;
+/** Samples (K+1 points) of each segment's quad centerline. */
+const RIBBON_SAMPLES = 8;
+/** Shimmer travel period (ms) and half-window (segments). */
+const SHIMMER_PERIOD = 1300;
+const SHIMMER_HALF = 1.4;
 
 /** Interpolated pixel center of snake cell i. */
 function center(
@@ -18,11 +29,7 @@ function center(
   return [origin.x + (c.x + 0.5) * cellSize, origin.y + (c.y + 0.5) * cellSize];
 }
 
-/**
- * Append a closed polygon (count vertices) to the path, rounding each vertex by
- * radius r (clamped to half the adjacent edges) via a quad through the vertex.
- * r <= 0 draws sharp corners. UI-thread worklet.
- */
+/** Append a closed polygon, rounding each vertex by r. UI-thread worklet. */
 function appendRoundedPoly(
   path: ReturnType<typeof Skia.Path.Make>,
   xs: number[],
@@ -67,18 +74,7 @@ function appendRoundedPoly(
   path.close();
 }
 
-/** Samples (K+1 points) of the quad A→(control C)→B. */
-const RIBBON_SAMPLES = 8;
-
-/**
- * Append one body segment as a filled ribbon swept along a SMOOTH quadratic
- * centerline A→(control C)→B. The curve is sampled finely and offset by ±hw
- * along its tangent normal, so the sides are smooth (not angular) and a turn
- * makes the outer edge run long while the inner edge pulls in — the segment
- * wraps the corner, squeezing inside / stretching outside, automatically per
- * turn direction. Ends are rounded within bounds (gaps preserved). UI-thread
- * worklet.
- */
+/** Filled ribbon swept along the smooth quad A→(control C)→B. UI-thread worklet. */
 function appendSmoothRibbon(
   path: ReturnType<typeof Skia.Path.Make>,
   ax: number,
@@ -91,10 +87,10 @@ function appendSmoothRibbon(
   r: number,
 ) {
   'worklet';
-  const leftX: number[] = [];
-  const leftY: number[] = [];
-  const rightX: number[] = [];
-  const rightY: number[] = [];
+  const polyX: number[] = [];
+  const polyY: number[] = [];
+  const rx: number[] = [];
+  const ry: number[] = [];
   for (let k = 0; k <= RIBBON_SAMPLES; k++) {
     const u = k / RIBBON_SAMPLES;
     const mu = 1 - u;
@@ -105,38 +101,212 @@ function appendSmoothRibbon(
     const tl = Math.sqrt(tx * tx + ty * ty) || 1;
     const nx = (-ty / tl) * hw;
     const ny = (tx / tl) * hw;
-    leftX.push(x + nx);
-    leftY.push(y + ny);
-    rightX.push(x - nx);
-    rightY.push(y - ny);
-  }
-  // Outline: left edge forward, then right edge backward.
-  const polyX: number[] = [];
-  const polyY: number[] = [];
-  for (let k = 0; k <= RIBBON_SAMPLES; k++) {
-    polyX.push(leftX[k]);
-    polyY.push(leftY[k]);
+    polyX.push(x + nx);
+    polyY.push(y + ny);
+    rx.push(x - nx);
+    ry.push(y - ny);
   }
   for (let k = RIBBON_SAMPLES; k >= 0; k--) {
-    polyX.push(rightX[k]);
-    polyY.push(rightY[k]);
+    polyX.push(rx[k]);
+    polyY.push(ry[k]);
   }
   appendRoundedPoly(path, polyX, polyY, polyX.length, r);
 }
 
-/**
- * Build the snake as a chain of INDEPENDENT segments that wrap around corners:
- * one smooth ribbon per cell along its bent centerline (inset for a gap), so
- * segments rotate and squeeze inside / stretch outside each turn. The head and
- * tail synthesize their open end half a cell along the heading so they stay
- * full-length. Wrap seams break the neighbor links. UI-thread worklet; pure.
- */
-function buildWrappedSegments(
+/** Append the wrapped ribbon for cell i with the given half-width. UI-thread worklet. */
+function appendSegmentAt(
+  path: ReturnType<typeof Skia.Path.Make>,
   from: Cell[],
   to: Cell[],
   t: number,
-  begin: number,
-  end: number,
+  i: number,
+  n: number,
+  origin: { x: number; y: number },
+  cellSize: number,
+  gap: number,
+  hw: number,
+  rounded: boolean,
+) {
+  'worklet';
+  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
+  const half = gap / 2;
+  const span = cellSize / 2 - half;
+  const r = rounded ? Math.min(hw, cellSize / 4) : 0;
+  const [cx, cy] = center(from, to, t, i, origin, cellSize);
+
+  let prevX = cx;
+  let prevY = cy;
+  let hasPrev = false;
+  if (i > 0) {
+    const [x, y] = center(from, to, t, i - 1, origin, cellSize);
+    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
+      prevX = x;
+      prevY = y;
+      hasPrev = true;
+    }
+  }
+  let nextX = cx;
+  let nextY = cy;
+  let hasNext = false;
+  if (i < n - 1) {
+    const [x, y] = center(from, to, t, i + 1, origin, cellSize);
+    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
+      nextX = x;
+      nextY = y;
+      hasNext = true;
+    }
+  }
+
+  if (!hasPrev && !hasNext) {
+    appendRoundedPoly(
+      path,
+      [cx - hw, cx + hw, cx + hw, cx - hw],
+      [cy - hw, cy - hw, cy + hw, cy + hw],
+      4,
+      r,
+    );
+    return;
+  }
+
+  let ax: number;
+  let ay: number;
+  if (hasPrev) {
+    const mx = (prevX + cx) / 2;
+    const my = (prevY + cy) / 2;
+    const dx = cx - mx;
+    const dy = cy - my;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    ax = mx + (dx / l) * half;
+    ay = my + (dy / l) * half;
+  } else {
+    const dx = cx - nextX;
+    const dy = cy - nextY;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    ax = cx + (dx / l) * span;
+    ay = cy + (dy / l) * span;
+  }
+  let bx: number;
+  let by: number;
+  if (hasNext) {
+    const mx = (cx + nextX) / 2;
+    const my = (cy + nextY) / 2;
+    const dx = cx - mx;
+    const dy = cy - my;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    bx = mx + (dx / l) * half;
+    by = my + (dy / l) * half;
+  } else {
+    const dx = cx - prevX;
+    const dy = cy - prevY;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    bx = cx + (dx / l) * span;
+    by = cy + (dy / l) * span;
+  }
+  appendSmoothRibbon(path, ax, ay, cx, cy, bx, by, hw, r);
+}
+
+/** Width scale for cell i: 1 in the body, tapering to TAIL_MIN over the tail. */
+function tailScale(i: number, tailStart: number, tailLen: number): number {
+  'worklet';
+  if (i < tailStart || tailLen <= 0) {
+    return 1;
+  }
+  return 1 - (1 - TAIL_MIN) * ((i - tailStart + 1) / tailLen);
+}
+
+/**
+ * Build one color group of the wrapped snake: which 0 = head (cell 0), 1 = body,
+ * 2 = tail (the trailing TAIL_LEN cells, tapering in width). Ranges + taper are
+ * computed from the current length inside the worklet. UI-thread worklet; pure.
+ */
+function buildTaperedGroup(
+  from: Cell[],
+  to: Cell[],
+  t: number,
+  origin: { x: number; y: number },
+  cellSize: number,
+  gap: number,
+  rounded: boolean,
+  which: number,
+) {
+  'worklet';
+  const path = Skia.Path.Make();
+  const n = to.length;
+  if (n === 0) {
+    return path;
+  }
+  const baseHw = (cellSize - gap) / 2;
+  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
+  const tailStart = n - tailLen;
+  let begin = 0;
+  let end = 0;
+  if (which === 0) {
+    begin = 0;
+    end = Math.min(1, n);
+  } else if (which === 1) {
+    begin = Math.min(1, n);
+    end = tailStart;
+  } else {
+    begin = tailStart;
+    end = n;
+  }
+  for (let i = begin; i < end; i++) {
+    const hw = baseHw * tailScale(i, tailStart, tailLen);
+    appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hw, rounded);
+  }
+  return path;
+}
+
+/** Chevron "scales" pointing toward the head, one per body/tail cell. */
+function buildScales(
+  from: Cell[],
+  to: Cell[],
+  t: number,
+  origin: { x: number; y: number },
+  cellSize: number,
+  gap: number,
+) {
+  'worklet';
+  const path = Skia.Path.Make();
+  const n = to.length;
+  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
+  const baseHw = (cellSize - gap) / 2;
+  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
+  const tailStart = n - tailLen;
+  const depth = cellSize * 0.18;
+  for (let i = 1; i < n; i++) {
+    const [cx, cy] = center(from, to, t, i, origin, cellSize);
+    // Direction toward the head (toward lower index).
+    let dx = 0;
+    let dy = 0;
+    const [pxv, pyv] = center(from, to, t, i - 1, origin, cellSize);
+    if ((pxv - cx) * (pxv - cx) + (pyv - cy) * (pyv - cy) <= breakSq) {
+      dx = pxv - cx;
+      dy = pyv - cy;
+    } else {
+      continue; // wrap seam — skip this scale
+    }
+    const dl = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / dl;
+    const uy = dy / dl;
+    const w = baseHw * tailScale(i, tailStart, tailLen) * 0.62;
+    const px = -uy;
+    const py = ux;
+    const tipx = cx + ux * depth;
+    const tipy = cy + uy * depth;
+    path.moveTo(cx + px * w, cy + py * w);
+    path.lineTo(tipx, tipy);
+    path.lineTo(cx - px * w, cy - py * w);
+  }
+  return path;
+}
+
+/** Segments inside a window that travels head↔tail over time (shimmer). */
+function buildShimmer(
+  from: Cell[],
+  to: Cell[],
+  t: number,
+  clockVal: number,
   origin: { x: number; y: number },
   cellSize: number,
   gap: number,
@@ -145,89 +315,19 @@ function buildWrappedSegments(
   'worklet';
   const path = Skia.Path.Make();
   const n = to.length;
-  const stop = Math.min(end, n);
-  const breakSq = cellSize * 1.5 * (cellSize * 1.5);
-  const hw = (cellSize - gap) / 2;
-  const half = gap / 2;
-  const span = cellSize / 2 - half; // half-cell reach for an open (head/tail) end
-  const r = rounded ? Math.min(hw, cellSize / 4) : 0;
-
-  for (let i = begin; i < stop; i++) {
-    const [cx, cy] = center(from, to, t, i, origin, cellSize);
-
-    let prevX = cx;
-    let prevY = cy;
-    let hasPrev = false;
-    if (i > 0) {
-      const [x, y] = center(from, to, t, i - 1, origin, cellSize);
-      if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
-        prevX = x;
-        prevY = y;
-        hasPrev = true;
-      }
+  if (n === 0) {
+    return path;
+  }
+  const baseHw = (cellSize - gap) / 2;
+  const tailLen = Math.min(TAIL_LEN, Math.max(0, n - 1));
+  const tailStart = n - tailLen;
+  const phase = (clockVal % SHIMMER_PERIOD) / SHIMMER_PERIOD;
+  const centerIdx = phase * (n + 4) - 2;
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(i - centerIdx) < SHIMMER_HALF) {
+      const hw = baseHw * tailScale(i, tailStart, tailLen);
+      appendSegmentAt(path, from, to, t, i, n, origin, cellSize, gap, hw, rounded);
     }
-    let nextX = cx;
-    let nextY = cy;
-    let hasNext = false;
-    if (i < n - 1) {
-      const [x, y] = center(from, to, t, i + 1, origin, cellSize);
-      if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= breakSq) {
-        nextX = x;
-        nextY = y;
-        hasNext = true;
-      }
-    }
-
-    if (!hasPrev && !hasNext) {
-      // Lone cell: an axis-aligned rounded square.
-      appendRoundedPoly(
-        path,
-        [cx - hw, cx + hw, cx + hw, cx - hw],
-        [cy - hw, cy - hw, cy + hw, cy + hw],
-        4,
-        r,
-      );
-      continue;
-    }
-
-    // End A: midpoint toward prev (inset), or a synthesized nose for the head.
-    let ax: number;
-    let ay: number;
-    if (hasPrev) {
-      const mx = (prevX + cx) / 2;
-      const my = (prevY + cy) / 2;
-      const dx = cx - mx;
-      const dy = cy - my;
-      const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      ax = mx + (dx / l) * half;
-      ay = my + (dy / l) * half;
-    } else {
-      const dx = cx - nextX;
-      const dy = cy - nextY;
-      const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      ax = cx + (dx / l) * span;
-      ay = cy + (dy / l) * span;
-    }
-    // End B: midpoint toward next (inset), or a synthesized tail tip.
-    let bx: number;
-    let by: number;
-    if (hasNext) {
-      const mx = (cx + nextX) / 2;
-      const my = (cy + nextY) / 2;
-      const dx = cx - mx;
-      const dy = cy - my;
-      const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      bx = mx + (dx / l) * half;
-      by = my + (dy / l) * half;
-    } else {
-      const dx = cx - prevX;
-      const dy = cy - prevY;
-      const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      bx = cx + (dx / l) * span;
-      by = cy + (dy / l) * span;
-    }
-
-    appendSmoothRibbon(path, ax, ay, cx, cy, bx, by, hw, r);
   }
   return path;
 }
@@ -265,31 +365,28 @@ function buildSegmentsPath(
 interface AnimatedSnakeProps {
   /** Shared glide state (clock + endpoints + timing) from useSnakeGlide. */
   glide: SnakeGlide;
-  /** Cell pitch in pixels. */
   cellSize: number;
-  /** Absolute pixel origin for cell (0,0). */
   origin: { x: number; y: number };
-  /** Inter-cell channel; segments are inset by this so they read as separate. */
   gap: number;
-  /** Rounded vs square cells (mirrors skin.cellShape). */
   rounded: boolean;
-  /** 'tube' = independent segments that wrap around corners; 'segments' =
-   * axis-aligned discrete cells (the retro look). */
+  /** 'tube' = wrapped independent segments; 'segments' = axis-aligned retro. */
   render: 'tube' | 'segments';
+  /** Body texture/effect (temporary, switchable in Settings). */
+  effect: SnakeEffect;
+  /** Visible board height (px) for the top-lit gloss gradient. */
+  boardHeight: number;
   headColor: string;
   bodyColor: string;
 }
 
 /**
- * Continuous-glide snake renderer. The engine stays discrete (one cell/tick);
- * this draws the in-between frames by interpolating each segment from its
- * previous grid cell to its current one. Both looks are a chain of INDEPENDENT
- * per-cell segments: 'tube' draws each as a ribbon along its bent centerline so
- * it rotates and squeezes-inside / stretches-outside around turns (a dynamic
- * wrap); 'segments' keeps them axis-aligned (retro). The head is simply the first
- * segment in the head color. Two derived values keep the hook count fixed for any
- * length and rebuild every frame on the UI thread via the glide's Reanimated
- * clock. A pure projection of the glide state. (smooth movement)
+ * Continuous-glide snake renderer. The body is a chain of independent segments
+ * that wrap around corners (see buildTaperedGroup/appendSmoothRibbon); the
+ * trailing segments taper in width and shade into a darker tail; and a
+ * switchable body effect (gloss/scales/outline/shimmer) overlays on top. All
+ * geometry rebuilds every frame on the UI thread via the glide's Reanimated
+ * clock; colors/shades are derived on the JS thread. A pure projection of the
+ * glide state. (smooth movement + texture)
  */
 export function AnimatedSnake({
   glide,
@@ -298,47 +395,121 @@ export function AnimatedSnake({
   gap,
   rounded,
   render,
+  effect,
+  boardHeight,
   headColor,
   bodyColor,
 }: AnimatedSnakeProps) {
   const { clock, from, to, start, duration } = glide;
   const wrapped = render === 'tube';
-  // A touch more separation than the raw cell gap so segments read as distinct.
   const segGap = wrapped ? Math.max(gap, cellSize * 0.12) : gap;
   const inset = gap / 2;
   const size = cellSize - gap;
   const corner = rounded ? cellSize / 4 : 0;
 
-  const bodyPath = useDerivedValue(() => {
-    'worklet';
-    const t = clamp01((clock.value - start.value) / duration.value);
-    if (wrapped) {
-      return buildWrappedSegments(
-        from.value, to.value, t, 1, to.value.length, origin, cellSize, segGap, rounded,
-      );
-    }
-    return buildSegmentsPath(
-      from.value, to.value, t, 1, to.value.length, origin, cellSize, inset, size, corner,
-    );
-  });
+  // Derived shades (JS thread).
+  const tailColor = darken(bodyColor, 0.34);
+  const outlineBody = darken(bodyColor, 0.55);
+  const outlineHead = darken(headColor, 0.5);
+  const outlineTail = darken(tailColor, 0.5);
+  const scaleColor = darken(bodyColor, 0.32);
+  const shimmerColor = withAlpha(lighten(bodyColor, 0.75), 0.5);
+  const gy0 = origin.y;
+  const gy1 = origin.y + boardHeight;
 
   const headPath = useDerivedValue(() => {
     'worklet';
     const t = clamp01((clock.value - start.value) / duration.value);
-    if (wrapped) {
-      return buildWrappedSegments(
-        from.value, to.value, t, 0, 1, origin, cellSize, segGap, rounded,
+    return wrapped
+      ? buildTaperedGroup(from.value, to.value, t, origin, cellSize, segGap, rounded, 0)
+      : buildSegmentsPath(from.value, to.value, t, 0, 1, origin, cellSize, inset, size, corner);
+  });
+
+  const bodyPath = useDerivedValue(() => {
+    'worklet';
+    const t = clamp01((clock.value - start.value) / duration.value);
+    return wrapped
+      ? buildTaperedGroup(from.value, to.value, t, origin, cellSize, segGap, rounded, 1)
+      : buildSegmentsPath(from.value, to.value, t, 1, to.value.length, origin, cellSize, inset, size, corner);
+  });
+
+  const tailPath = useDerivedValue(() => {
+    'worklet';
+    const t = clamp01((clock.value - start.value) / duration.value);
+    return wrapped
+      ? buildTaperedGroup(from.value, to.value, t, origin, cellSize, segGap, rounded, 2)
+      : Skia.Path.Make();
+  });
+
+  const fxPath = useDerivedValue(() => {
+    'worklet';
+    const t = clamp01((clock.value - start.value) / duration.value);
+    if (wrapped && effect === 'scales') {
+      return buildScales(from.value, to.value, t, origin, cellSize, segGap);
+    }
+    if (wrapped && effect === 'shimmer') {
+      return buildShimmer(from.value, to.value, t, clock.value, origin, cellSize, segGap, rounded);
+    }
+    return Skia.Path.Make();
+  });
+
+  // Segments (retro) mode: plain body + head, no taper/effects.
+  if (!wrapped) {
+    return (
+      <>
+        <Path path={bodyPath} color={bodyColor} />
+        <Path path={headPath} color={headColor} />
+      </>
+    );
+  }
+
+  const fill = (
+    p: ReturnType<typeof useDerivedValue<ReturnType<typeof Skia.Path.Make>>>,
+    color: string,
+    key: string,
+  ) => {
+    if (effect === 'gloss') {
+      return (
+        <Path key={key} path={p}>
+          <LinearGradient
+            start={vec(0, gy0)}
+            end={vec(0, gy1)}
+            colors={[lighten(color, 0.45), color, darken(color, 0.32)]}
+          />
+        </Path>
       );
     }
-    return buildSegmentsPath(
-      from.value, to.value, t, 0, 1, origin, cellSize, inset, size, corner,
-    );
-  });
+    return <Path key={key} path={p} color={color} />;
+  };
+
+  const outlineWidth = Math.max(1.5, cellSize * 0.07);
 
   return (
     <>
-      <Path path={bodyPath} color={bodyColor} />
-      <Path path={headPath} color={headColor} />
+      {fill(bodyPath, bodyColor, 'body')}
+      {fill(tailPath, tailColor, 'tail')}
+      {fill(headPath, headColor, 'head')}
+
+      {effect === 'outline' && (
+        <>
+          <Path path={bodyPath} color={outlineBody} style="stroke" strokeWidth={outlineWidth} strokeJoin="round" />
+          <Path path={tailPath} color={outlineTail} style="stroke" strokeWidth={outlineWidth} strokeJoin="round" />
+          <Path path={headPath} color={outlineHead} style="stroke" strokeWidth={outlineWidth} strokeJoin="round" />
+        </>
+      )}
+
+      {effect === 'scales' && (
+        <Path
+          path={fxPath}
+          color={scaleColor}
+          style="stroke"
+          strokeWidth={Math.max(1, cellSize * 0.06)}
+          strokeJoin="round"
+          strokeCap="round"
+        />
+      )}
+
+      {effect === 'shimmer' && <Path path={fxPath} color={shimmerColor} />}
     </>
   );
 }

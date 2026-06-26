@@ -55,3 +55,8 @@ export function withAlpha(hex: string, alpha: number): string {
   const { r, g, b } = parse(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** Parse a hex color to its {r,g,b} channels (0..255). */
+export function toRgb(hex: string): { r: number; g: number; b: number } {
+  return parse(hex);
+}

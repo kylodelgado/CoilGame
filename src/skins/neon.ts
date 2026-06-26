@@ -14,8 +14,8 @@ export const neon: Skin = {
   cellShape: 'rounded',
   snakeHead: '#00FFFF',
   snakeBody: '#0A8A8A',
-  // Neon keeps the classic look: separated rounded-rectangle segments.
-  snakeRender: 'segments',
+  // Wrapped segments: independent, squeezing, tapered (like every skin now).
+  snakeRender: 'tube',
   foodColor: '#FF2EC4',
   foodShape: 'circle',
   bonusColor: '#FFE600', // electric yellow, contrasts the magenta food

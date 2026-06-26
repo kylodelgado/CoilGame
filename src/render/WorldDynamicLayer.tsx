@@ -137,7 +137,18 @@ export function WorldDynamicLayer({
         />
       );
     }
-    return filledCell(cell, color, key);
+    // Square pickups get generously rounded corners (softer than board cells).
+    return (
+      <RoundedRect
+        key={key}
+        x={px(cell.x)}
+        y={py(cell.y)}
+        width={size}
+        height={size}
+        r={size * 0.4}
+        color={color}
+      />
+    );
   };
 
   // Overscanned grid lines: world cells spanning [origin-1, origin+extent+1],
@@ -204,7 +215,7 @@ export function WorldDynamicLayer({
           cellSize={cellSize}
           origin={gridOrigin}
           gap={skin.cellGap}
-          rounded={skin.cellShape === 'rounded'}
+          rounded={/* the snake is always rounded, regardless of board cell shape */ true}
           render={skin.snakeRender}
           effect={snakeEffect}
           boardHeight={viewport.rows * cellSize}

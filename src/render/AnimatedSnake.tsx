@@ -1,7 +1,7 @@
 import { LinearGradient, Path, Shadow, Skia, vec } from '@shopify/react-native-skia';
 import { useDerivedValue } from 'react-native-reanimated';
 import type { Cell, SnakeEffect } from '../engine/types';
-import { darken, lighten, mix, withAlpha } from './color';
+import { darken, lighten, mix, toRgb, withAlpha } from './color';
 import { clamp01, interpCell, segmentFrom } from './interpolate';
 import type { SnakeGlide } from './useSnakeGlide';
 
@@ -140,7 +140,8 @@ function appendSegmentAt(
   const breakSq = cellSize * 1.5 * (cellSize * 1.5);
   const half = gap / 2;
   const span = cellSize / 2 - half;
-  const r = rounded ? Math.min(hwStart, hwEnd, cellSize / 4) : 0;
+  // Round the ends close to a full semicircle (pill-ish) for soft segment edges.
+  const r = rounded ? Math.min(hwStart, hwEnd) * 0.92 : 0;
   const [cx, cy] = center(from, to, t, i, origin, cellSize);
 
   let prevX = cx;
@@ -451,18 +452,13 @@ export function AnimatedSnake({
   const size = cellSize - gap;
   const corner = rounded ? cellSize / 4 : 0;
 
-  // Speed glow: ramps in past GLOW_START, heating from the head color toward hot
-  // orange and growing its blur halo as the snake nears top speed.
+  // Speed glow: ramps in past GLOW_START. Its halo PULSES — breathing in and out
+  // via the clock — with the pulse growing stronger and faster as speed climbs,
+  // and heating from the head color toward hot orange. (dynamic speed glow)
   const glowAmt = Math.max(0, Math.min(1, (glow - GLOW_START) / (1 - GLOW_START)));
-  const glowNode =
-    glowAmt > 0.01 ? (
-      <Shadow
-        dx={0}
-        dy={0}
-        blur={glowAmt * cellSize * 0.75}
-        color={withAlpha(mix(headColor, '#FF5A1A', glowAmt), 0.85 * glowAmt)}
-      />
-    ) : null;
+  const hot = toRgb(mix(headColor, '#FF5A1A', glowAmt));
+  // Angular speed of the pulse (rad/ms): faster near top speed.
+  const glowOmega = (2 * Math.PI) / (900 - 520 * glowAmt);
 
   // Derived shades (JS thread).
   const tailColor = darken(bodyColor, 0.34);
@@ -509,6 +505,27 @@ export function AnimatedSnake({
     }
     return Skia.Path.Make();
   });
+
+  // Pulsing glow halo (UI thread): blur + alpha breathe via the clock, scaled by
+  // glowAmt so it fades to nothing at low speed and pulses hard near top speed.
+  const glowBlur = useDerivedValue(() => {
+    'worklet';
+    if (glowAmt <= 0.01) {
+      return 0;
+    }
+    const pulse = 0.5 + 0.5 * Math.sin(clock.value * glowOmega);
+    return glowAmt * cellSize * (0.25 + 0.7 * pulse);
+  });
+  const glowColor = useDerivedValue(() => {
+    'worklet';
+    const pulse = 0.5 + 0.5 * Math.sin(clock.value * glowOmega);
+    const a = 0.9 * glowAmt * pulse;
+    return `rgba(${hot.r}, ${hot.g}, ${hot.b}, ${a})`;
+  });
+  const glowNode =
+    glowAmt > 0.01 ? (
+      <Shadow dx={0} dy={0} blur={glowBlur} color={glowColor} />
+    ) : null;
 
   // Segments (retro) mode: plain body + head (glow still applies), no taper/fx.
   if (!wrapped) {

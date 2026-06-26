@@ -120,7 +120,18 @@ export function DynamicLayer({
         />
       );
     }
-    return cellNode(r, color, key);
+    // Square pickups get generously rounded corners (softer than board cells).
+    return (
+      <RoundedRect
+        key={key}
+        x={r.x}
+        y={r.y}
+        width={r.width}
+        height={r.height}
+        r={Math.min(r.width, r.height) * 0.4}
+        color={color}
+      />
+    );
   };
 
   return (
@@ -138,7 +149,7 @@ export function DynamicLayer({
         cellSize={gridSpec.cellSize}
         origin={{ x: gridSpec.originX, y: gridSpec.originY }}
         gap={skin.cellGap}
-        rounded={skin.cellShape === 'rounded'}
+        rounded={/* the snake is always rounded, regardless of board cell shape */ true}
         render={skin.snakeRender}
         effect={snakeEffect}
         boardHeight={gridSpec.rows * gridSpec.cellSize}

@@ -249,8 +249,8 @@ describe('GameScreen integration', () => {
       renderGame(mode);
       startRunning();
 
-      // The D-pad lives in the chrome below the board.
-      fireEvent.press(screen.getByTestId('dpad-up'));
+      // The D-pad lives in the chrome below the board; it fires on touch-down.
+      fireEvent(screen.getByTestId('dpad-up'), 'pressIn');
       advance(100); // one tick consumes the queued direction
 
       expect(mode.tick).toHaveBeenCalled();

@@ -12,6 +12,8 @@ import { translationToDirection } from './InputSource';
 
 interface AnalogInputProps {
   onDirection: (dir: Direction) => void;
+  /** Draw the stick base + knob. False = an invisible joystick (steer only). */
+  showStick?: boolean;
 }
 
 const BASE_RADIUS = 56;
@@ -31,7 +33,7 @@ const DEADZONE_PX = 22;
  * (shared values), so steering never churns React state mid-game; only the
  * one-shot direction change crosses to JS via runOnJS. (analog controls)
  */
-export function AnalogInput({ onDirection }: AnalogInputProps) {
+export function AnalogInput({ onDirection, showStick = true }: AnalogInputProps) {
   const skin = useSkin();
 
   // Anchor (touch-down point) and knob offset, in view pixels — all UI-thread.
@@ -100,18 +102,22 @@ export function AnalogInput({ onDirection }: AnalogInputProps) {
   return (
     <GestureDetector gesture={gesture}>
       <View style={StyleSheet.absoluteFill} testID="analog-surface">
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.base,
-            { borderColor: skin.snakeBody },
-            baseStyle,
-          ]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.knob, { backgroundColor: skin.snakeHead }, knobStyle]}
-        />
+        {showStick && (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.base, { borderColor: skin.snakeBody }, baseStyle]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.knob,
+                { backgroundColor: skin.snakeHead },
+                knobStyle,
+              ]}
+            />
+          </>
+        )}
       </View>
     </GestureDetector>
   );

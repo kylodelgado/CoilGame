@@ -24,7 +24,8 @@ describe('DpadInput component', () => {
     render(<DpadInput onDirection={onDirection} />);
 
     for (const b of buttons) {
-      fireEvent.press(screen.getByTestId(`dpad-${b.toLowerCase()}`));
+      // The d-pad fires on touch-down (onPressIn) for instant response.
+      fireEvent(screen.getByTestId(`dpad-${b.toLowerCase()}`), 'pressIn');
     }
 
     expect(onDirection.mock.calls.map((c) => c[0])).toEqual([

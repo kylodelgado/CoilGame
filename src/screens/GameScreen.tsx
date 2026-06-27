@@ -36,7 +36,6 @@ import { WorldBoard } from '../render/WorldBoard';
 import { WorldDynamicLayer } from '../render/WorldDynamicLayer';
 import { GpsArrow } from '../render/GpsArrow';
 import { computeViewport, worldToScreen } from '../render/camera';
-import { SwipeInput } from '../input/SwipeInput';
 import { DpadInput } from '../input/DpadInput';
 import { AnalogInput } from '../input/AnalogInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
@@ -58,6 +57,10 @@ import { SpeedGauge } from './SpeedGauge';
 
 const SCORE_BAR_HEIGHT = 64;
 const COUNTDOWN_SECONDS = 3;
+// Vertical space the on-screen D-pad chrome occupies below the board (beyond the
+// bottom safe-area inset), reserved so the grid never renders behind it. Matches
+// the D-pad: 3 rows of 72px buttons + 10px gaps + chrome padding.
+const DPAD_RESERVED_HEIGHT = 256;
 
 /** Minimal projection of the authoritative state — only what the UI needs. */
 interface Projection {
@@ -167,14 +170,23 @@ export function GameScreen(props: GameScreenProps = {}) {
     [props.submitter],
   );
 
-  // Grid recomputes on dimension/safe-area/preset change (foldables, EH).
+  // Grid recomputes on dimension/safe-area/preset change (foldables, EH). When
+  // the D-pad is on, reserve its chrome so the board fits ABOVE it (no overlap).
   const grid = useMemo(() => {
+    const dpadReserved = controlScheme === 'DPAD' ? DPAD_RESERVED_HEIGHT : 0;
     const playAreaHeight = Math.max(
       0,
-      height - insets.top - insets.bottom - SCORE_BAR_HEIGHT,
+      height - insets.top - insets.bottom - SCORE_BAR_HEIGHT - dpadReserved,
     );
     return computeGrid(width, playAreaHeight, preset.targetColumns);
-  }, [width, height, insets.top, insets.bottom, preset.targetColumns]);
+  }, [
+    width,
+    height,
+    insets.top,
+    insets.bottom,
+    preset.targetColumns,
+    controlScheme,
+  ]);
 
   const config = useMemo(
     () => mode.buildConfig(grid, wall, preset),
@@ -276,8 +288,15 @@ export function GameScreen(props: GameScreenProps = {}) {
   }, [controller]);
 
   const onSwipe = useCallback(
-    (dir: Direction) => controller.enqueue(dir),
-    [controller],
+    (dir: Direction) => {
+      // Tactile tick on every direction input (d-pad press / joystick steer),
+      // gated by the live haptics setting.
+      if (useSettingsStore.getState().hapticsEnabled) {
+        haptics.turn?.();
+      }
+      controller.enqueue(dir);
+    },
+    [controller, haptics],
   );
 
   const {
@@ -402,7 +421,10 @@ export function GameScreen(props: GameScreenProps = {}) {
             />
           </>
         )}
-        {controlScheme === 'SWIPE' && <SwipeInput onDirection={onSwipe} />}
+        {/* Regular touch control: an invisible joystick (steer by holding/dragging). */}
+        {controlScheme === 'SWIPE' && (
+          <AnalogInput onDirection={onSwipe} showStick={false} />
+        )}
         {controlScheme === 'ANALOG' && <AnalogInput onDirection={onSwipe} />}
 
         {/* Active-effect countdown bars: an overlay, so they never reflow the

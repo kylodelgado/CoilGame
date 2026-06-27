@@ -4,6 +4,8 @@ import * as Haptics from 'expo-haptics';
 export interface HapticsPort {
   eat(): void;
   death(): void;
+  /** A crisp tick when a direction input is registered (d-pad/steer feedback). */
+  turn?(): void;
 }
 
 /**
@@ -32,6 +34,9 @@ export function createExpoHaptics(): HapticsPort {
       safe(() =>
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
       );
+    },
+    turn(): void {
+      safe(() => Haptics.selectionAsync());
     },
   };
 }

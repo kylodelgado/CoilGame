@@ -80,7 +80,8 @@ export function DpadInput({ onDirection }: DpadInputProps) {
       testID={`dpad-${b.toLowerCase()}`}
       accessibilityRole="button"
       accessibilityLabel={`Move ${b.toLowerCase()}`}
-      onPress={() => press(b)}
+      // Fire on touch-DOWN, not release, so the move + haptic feel instant.
+      onPressIn={() => press(b)}
       style={[styles.button, { borderColor: skin.snakeBody }]}
     >
       <Text style={[styles.glyph, { color: skin.snakeHead }]}>{GLYPH[b]}</Text>
@@ -100,19 +101,19 @@ export function DpadInput({ onDirection }: DpadInputProps) {
   );
 }
 
-const BUTTON_SIZE = 56;
+const BUTTON_SIZE = 72;
 
 const styles = StyleSheet.create({
-  pad: { alignItems: 'center', justifyContent: 'center', gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pad: { alignItems: 'center', justifyContent: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   spacer: { width: BUTTON_SIZE },
   button: {
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glyph: { fontSize: 22, fontWeight: '700' },
+  glyph: { fontSize: 30, fontWeight: '700' },
 });

@@ -13,9 +13,9 @@ import { PresetPreview } from '../render/PresetPreview';
 import type { ControlScheme, SnakeEffect } from '../engine/types';
 
 const CONTROL_OPTIONS: ReadonlyArray<readonly [ControlScheme, string]> = [
-  ['SWIPE', 'Swipe'],
+  ['SWIPE', 'Joystick'],
   ['DPAD', 'D-pad'],
-  ['ANALOG', 'Analog'],
+  ['ANALOG', 'Stick'],
 ];
 
 // Temporary: compare snake body effects and keep the best.

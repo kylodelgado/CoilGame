@@ -194,7 +194,14 @@ export type ControlScheme = 'SWIPE' | 'DPAD' | 'ANALOG';
  * Temporary snake body texture/effect selector (compared in Settings while we
  * pick the best). Render-only; not persisted. (snake texture/effects)
  */
-export type SnakeEffect = 'none' | 'gloss' | 'scales' | 'outline' | 'shimmer';
+export type SnakeEffect =
+  | 'none'
+  | 'gloss'
+  | 'scales'
+  | 'outline'
+  | 'shimmer'
+  /** Pre-rendered 3D head sprite (Blender) drawn over the procedural body. */
+  | 'sprite';
 
 export interface PersistedSettings {
   presetId: PresetId;

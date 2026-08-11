@@ -18,13 +18,15 @@ const CONTROL_OPTIONS: ReadonlyArray<readonly [ControlScheme, string]> = [
   ['ANALOG', 'Stick'],
 ];
 
-// Temporary: compare snake body effects and keep the best.
+// Temporary: compare snake looks and keep the best. '3D' is the real snake;
+// the rest are the older flat treatments, kept for side-by-side comparison.
 const EFFECT_OPTIONS: ReadonlyArray<readonly [SnakeEffect, string]> = [
-  ['none', 'None'],
+  ['sprite', '3D'],
   ['gloss', 'Gloss'],
   ['scales', 'Scales'],
   ['outline', 'Outline'],
   ['shimmer', 'Shimmer'],
+  ['none', 'None'],
 ];
 
 interface SettingsScreenProps {
@@ -126,7 +128,7 @@ export function SettingsScreen({ storage }: SettingsScreenProps = {}) {
       </View>
 
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>Snake FX</Text>
+        <Text style={styles.rowLabel}>Snake</Text>
         <View style={styles.segment}>
           {EFFECT_OPTIONS.map(([value, label]) => {
             const selected = value === snakeEffect;

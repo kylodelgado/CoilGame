@@ -8,6 +8,8 @@ import { AnimatedSnake } from './AnimatedSnake';
 import { BurstField } from './BurstField';
 import { PowerupGlyph } from './PowerupGlyph';
 import { POWERUP_META } from './powerupMeta';
+import { Snake3DBody } from './Snake3DBody';
+import { SnakeHeadSprite } from './SnakeHeadSprite';
 import { useSnakeGlide } from './useSnakeGlide';
 import { cellRect, type PixelRect } from './geometry';
 
@@ -144,19 +146,37 @@ export function DynamicLayer({
           `o${i}`,
         ),
       )}
-      <AnimatedSnake
-        glide={glide}
-        cellSize={gridSpec.cellSize}
-        origin={{ x: gridSpec.originX, y: gridSpec.originY }}
-        gap={skin.cellGap}
-        rounded={/* the snake is always rounded, regardless of board cell shape */ true}
-        render={skin.snakeRender}
-        effect={snakeEffect}
-        boardHeight={gridSpec.rows * gridSpec.cellSize}
-        glow={glow}
-        headColor={skin.snakeHead}
-        bodyColor={skin.snakeBody}
-      />
+      {/* '3d' replaces the flat renderer outright rather than layering over it. */}
+      {snakeEffect === 'sprite' ? (
+        <>
+          <Snake3DBody
+            glide={glide}
+            cellSize={gridSpec.cellSize}
+            origin={{ x: gridSpec.originX, y: gridSpec.originY }}
+            glow={glow}
+          />
+          <SnakeHeadSprite
+            glide={glide}
+            cellSize={gridSpec.cellSize}
+            origin={{ x: gridSpec.originX, y: gridSpec.originY }}
+            length={snake.length}
+          />
+        </>
+      ) : (
+        <AnimatedSnake
+          glide={glide}
+          cellSize={gridSpec.cellSize}
+          origin={{ x: gridSpec.originX, y: gridSpec.originY }}
+          gap={skin.cellGap}
+          rounded={/* the snake is always rounded, regardless of board cell shape */ true}
+          render={skin.snakeRender}
+          effect={snakeEffect}
+          boardHeight={gridSpec.rows * gridSpec.cellSize}
+          glow={glow}
+          headColor={skin.snakeHead}
+          bodyColor={skin.snakeBody}
+        />
+      )}
       {food !== null &&
         pickupNode(food, skin.foodColor, skin.foodShape, 'food')}
       {bonusFood != null &&

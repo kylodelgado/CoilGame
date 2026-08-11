@@ -14,6 +14,8 @@ import { AnimatedSnake } from './AnimatedSnake';
 import { BurstField } from './BurstField';
 import { PowerupGlyph } from './PowerupGlyph';
 import { POWERUP_META } from './powerupMeta';
+import { Snake3DBody } from './Snake3DBody';
+import { SnakeHeadSprite } from './SnakeHeadSprite';
 import type { Viewport } from './camera';
 import { useGpsCamera } from './useGpsCamera';
 import { useSnakeGlide } from './useSnakeGlide';
@@ -210,19 +212,37 @@ export function WorldDynamicLayer({
             r={size / 2}
           />
         )}
-        <AnimatedSnake
-          glide={glide}
-          cellSize={cellSize}
-          origin={gridOrigin}
-          gap={skin.cellGap}
-          rounded={/* the snake is always rounded, regardless of board cell shape */ true}
-          render={skin.snakeRender}
-          effect={snakeEffect}
-          boardHeight={viewport.rows * cellSize}
-          glow={glow}
-          headColor={skin.snakeHead}
-          bodyColor={skin.snakeBody}
-        />
+        {/* '3d' replaces the flat renderer outright rather than layering over it. */}
+        {snakeEffect === 'sprite' ? (
+          <>
+            <Snake3DBody
+              glide={glide}
+              cellSize={cellSize}
+              origin={gridOrigin}
+              glow={glow}
+            />
+            <SnakeHeadSprite
+              glide={glide}
+              cellSize={cellSize}
+              origin={gridOrigin}
+              length={snake.length}
+            />
+          </>
+        ) : (
+          <AnimatedSnake
+            glide={glide}
+            cellSize={cellSize}
+            origin={gridOrigin}
+            gap={skin.cellGap}
+            rounded={/* the snake is always rounded, regardless of board cell shape */ true}
+            render={skin.snakeRender}
+            effect={snakeEffect}
+            boardHeight={viewport.rows * cellSize}
+            glow={glow}
+            headColor={skin.snakeHead}
+            bodyColor={skin.snakeBody}
+          />
+        )}
         {/* Effects live inside the camera group so they pan with the world. */}
         <BurstField
           spawns={bustSpawns}

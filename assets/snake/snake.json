@@ -1,0 +1,32 @@
+{
+  "generator": "snakekit.export_sprites",
+  "projection": "orthographic, straight down (rotation-safe: rotate the sprite freely to face any heading)",
+  "forward": "+Y in world == UP in the sprite image",
+  "anchor": "image centre == the piece's grid-cell anchor",
+  "head": {
+    "span_cells": 2.6,
+    "size_px": 320,
+    "gape": [
+      "head_gape_0.png",
+      "head_gape_1.png",
+      "head_gape_2.png",
+      "head_gape_3.png",
+      "head_gape_4.png",
+      "head_gape_5.png"
+    ],
+    "flick": [
+      "head_flick_0.png",
+      "head_flick_1.png",
+      "head_flick_2.png",
+      "head_flick_3.png"
+    ]
+  },
+  "body": {
+    "strip": {
+      "image": "body_tex.png",
+      "cells_long": 2.0,
+      "u_spans": "the full tube width, edge to edge",
+      "tile": "mirror vertically \u2014 seamless without a periodic pattern"
+    }
+  }
+}

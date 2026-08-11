@@ -50,17 +50,26 @@ jest.mock('@shopify/react-native-skia', () => {
     () =>
     ({ children }) =>
       React.createElement(View, null, children ?? null);
-  const fakePath = {
-    addRRect: () => fakePath,
-    addRect: () => fakePath,
-    addCircle: () => fakePath,
-    moveTo: () => fakePath,
-    lineTo: () => fakePath,
-    quadTo: () => fakePath,
-    cubicTo: () => fakePath,
-    close: () => fakePath,
-    reset: () => fakePath,
-    rewind: () => fakePath,
+  // A fresh recording path per Make(): tests assert on what geometry a builder
+  // emitted, which a shared no-op singleton could never show.
+  const makePath = () => {
+    const ops = [];
+    const path = { ops, isEmpty: () => ops.length === 0 };
+    for (const name of [
+      'addRRect', 'addRect', 'addCircle', 'moveTo', 'lineTo', 'quadTo', 'cubicTo', 'close',
+    ]) {
+      path[name] = (...args) => {
+        ops.push({ op: name, args });
+        return path;
+      };
+    }
+    for (const name of ['reset', 'rewind']) {
+      path[name] = () => {
+        ops.length = 0;
+        return path;
+      };
+    }
+    return path;
   };
   return {
     Canvas: passthrough(),
@@ -70,13 +79,18 @@ jest.mock('@shopify/react-native-skia', () => {
     RoundedRect: passthrough(),
     Circle: passthrough(),
     Path: passthrough(),
+    Image: passthrough(),
+    Vertices: passthrough(),
+    ImageShader: passthrough(),
     Line: passthrough(),
     LinearGradient: passthrough(),
     Shadow: passthrough(),
     vec: (x, y) => ({ x, y }),
     useClock: () => ({ value: 0 }),
+    // Stand in for a decoded SkImage so sprite-backed trees mount.
+    useImage: () => ({ width: () => 320, height: () => 320 }),
     Skia: {
-      Path: { Make: () => fakePath },
+      Path: { Make: makePath },
       XYWHRect: (x, y, width, height) => ({ x, y, width, height }),
       RRectXY: (rect) => rect,
     },

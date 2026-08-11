@@ -63,7 +63,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
   return {
     ...DEFAULT_SETTINGS,
-    snakeEffect: 'gloss',
+    // The 3D snake (shaded body + pre-rendered head sprite) is the default look;
+    // the flat effects below it stay available for comparison.
+    snakeEffect: 'sprite',
     hydrated: false,
 
     async hydrate(storage: StoragePort): Promise<void> {

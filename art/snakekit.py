@@ -610,7 +610,7 @@ def mat_body_strip(name="MAT_BodyStrip",
     # the entire dorsal band and takes the scale bump with it, turning the strip
     # milky. Authoring the sheen as an explicit narrow band means its width and
     # strength are exactly what they are set to, and it can never clip.
-    sheen = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.30, 0.02, 0.0, 1.0), 0.42)
+    sheen = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.30, 0.02, 0.0, 1.0), 0.34)
     # Dulled over the blotches — pigment there is matte, and letting the sheen
     # run at full strength across a saddle erases the marking it crosses.
     sheen = _mth(nt, 'MULTIPLY', sheen,

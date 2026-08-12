@@ -748,6 +748,19 @@ export const BODY_LIGHT: LightRig = (() => {
 })();
 
 /**
+ * Prebuilt vertex-color strings, one per 8-bit level: Skia's Vertices takes
+ * colors as strings, and building them in the per-frame worklet would allocate
+ * hundreds of strings a frame. GRAY are diffuse multipliers (modulate);
+ * SPEC are additive white levels (plus).
+ */
+const GRAY_LUT: string[] = [];
+const SPEC_LUT: string[] = [];
+for (let i = 0; i < 256; i++) {
+  GRAY_LUT.push(`rgb(${i},${i},${i})`);
+  SPEC_LUT.push(`rgba(255,255,255,${(i / 255).toFixed(4)})`);
+}
+
+/**
  * Like meshFromSpine, but an indexed triangle mesh with LIT_COLS columns per
  * sample and two per-vertex color arrays:
  *
@@ -779,8 +792,8 @@ export function litMeshFromSpine(
   'worklet';
   const verts: { x: number; y: number }[] = [];
   const uvs: { x: number; y: number }[] = [];
-  const colors: number[] = [];
-  const specs: number[] = [];
+  const colors: string[] = [];
+  const specs: string[] = [];
   const indices: number[] = [];
   const { xs, ys, nxs, nys, wf, wave, swell, arc, runStart, runEnd } = sp;
   const nCols = LIT_COLS.length;
@@ -823,15 +836,12 @@ export function litMeshFromSpine(
         const d = Math.max(0, nx3 * light.lx + ny3 * light.ly + nz * light.lz);
         let iy = light.ambient + light.diffuse * d;
         iy = iy > 1 ? 1 : iy;
-        const ib = Math.round(iy * 255);
-        colors.push(((0xff << 24) | (ib << 16) | (ib << 8) | ib) >>> 0);
+        colors.push(GRAY_LUT[Math.round(iy * 255)]);
 
         const sd = Math.max(0, nx3 * hx + ny3 * hy + nz * hz);
         let sv = Math.pow(sd, light.shininess) * light.specular;
         sv = sv > 1 ? 1 : sv;
-        // Premultiplied white: alpha rides along so "plus" stays valid premul.
-        const sb = Math.round(sv * 255);
-        specs.push(((sb << 24) | (sb << 16) | (sb << 8) | sb) >>> 0);
+        specs.push(SPEC_LUT[Math.round(sv * 255)]);
       }
       if (k > s) {
         const prev = row - nCols;

@@ -2,7 +2,9 @@ import { act, render } from '@testing-library/react-native';
 import { DynamicLayer } from '../src/render/DynamicLayer';
 import { Snake3DBody } from '../src/render/Snake3DBody';
 import {
+  BODY_LIGHT,
   computeSpine,
+  litMeshFromSpine,
   meshFromSpine,
   tubeFromSpine,
 } from '../src/render/snakeRibbon';
@@ -201,6 +203,58 @@ describe('continuous body spine', () => {
     const { verts, uvs } = meshFromSpine(trace([]), 9, 192, 384, 40);
     expect(verts).toHaveLength(0);
     expect(uvs).toHaveLength(0);
+  });
+
+  it('lit mesh: five columns per sample, valid indices, edge-to-edge UVs', () => {
+    const sp = trace(snake(6));
+    const m = litMeshFromSpine(sp, 9, 192, 384, 40, BODY_LIGHT);
+    const samples = sp.runEnd[0] - sp.runStart[0] + 1;
+    expect(m.verts).toHaveLength(samples * 5);
+    expect(m.uvs).toHaveLength(m.verts.length);
+    expect(m.colors).toHaveLength(m.verts.length);
+    expect(m.specs).toHaveLength(m.verts.length);
+    // (samples-1) quads per column pair, two triangles each.
+    expect(m.indices).toHaveLength((samples - 1) * 4 * 6);
+    for (const i of m.indices) {
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(i).toBeLessThan(m.verts.length);
+    }
+    // The two silhouette columns carry the texture's two edges, like the
+    // unlit strip: +normal edge at u=0, -normal edge at u=texW.
+    for (let k = 0; k < m.uvs.length; k += 5) {
+      expect(m.uvs[k].x).toBe(192);
+      expect(m.uvs[k + 2].x).toBeCloseTo(96, 6);
+      expect(m.uvs[k + 4].x).toBe(0);
+    }
+  });
+
+  it('lit mesh: lighting is directional — the two flanks shade differently', () => {
+    const sp = trace(snake(8));
+    const m = litMeshFromSpine(sp, 9, 192, 384, 40, BODY_LIGHT);
+    // Pick a mid-body sample away from the tapered ends.
+    const row = Math.floor(m.verts.length / 5 / 2) * 5;
+    // Grayscale "rgb(v,v,v)" multiplier: parse one channel.
+    const chan = (c: string) => parseInt(c.slice(4), 10);
+    const left = chan(m.colors[row]);
+    const centre = chan(m.colors[row + 2]);
+    const right = chan(m.colors[row + 4]);
+    // The spine faces the (mostly overhead) light most directly...
+    expect(centre).toBeGreaterThanOrEqual(left);
+    expect(centre).toBeGreaterThanOrEqual(right);
+    // ...and on a horizontal body one flank must catch more light than the
+    // other — the whole point of lighting it dynamically.
+    expect(left).not.toBe(right);
+    // Specular ("rgba(255,255,255,a)") peaks on the crown of the tube, not at
+    // the silhouette.
+    const spec = (i: number) => parseFloat(m.specs[i].split(',')[3]);
+    expect(spec(row + 2)).toBeGreaterThan(spec(row));
+    expect(spec(row + 2)).toBeGreaterThan(spec(row + 4));
+  });
+
+  it('lit mesh: emits nothing for an empty snake', () => {
+    const m = litMeshFromSpine(trace([]), 9, 192, 384, 40, BODY_LIGHT);
+    expect(m.verts).toHaveLength(0);
+    expect(m.indices).toHaveLength(0);
   });
 
   it('survives a single-cell snake by capping it as a disc', () => {

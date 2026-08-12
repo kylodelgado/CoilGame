@@ -34,8 +34,8 @@ const TEX_H = 768;
 
 /**
  * Body half-width in cells. Kept just under the head sprite's neck collar
- * (0.464 cells in the Blender model) so the ribbon always tucks underneath it
- * rather than showing its edges around the jaw.
+ * (0.442 cells at its tail in the Blender model) so the ribbon always tucks
+ * underneath it rather than showing its edges around the jaw.
  */
 const BODY_HALF_WIDTH = 0.44;
 

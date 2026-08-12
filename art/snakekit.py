@@ -54,6 +54,13 @@ CRANIUM = [
     (0.76, 0.100, 0.09, 0.035),  # blunt tip
 ]
 
+# Global width factor on the skull and everything mounted to it. The CRANIUM
+# table was authored with jowls 1.34 cells across — half again wider than the
+# 0.88-cell body tube, which reads fine against a full-grown body but balloons
+# next to the 3-cell starting snake. 0.84 brings the jowls to ~1.12 cells:
+# still a viper's arrow-head, no longer a lollipop.
+HEAD_W = 0.84
+
 NOSE_Y = 0.76        # snout tip
 MOUTH_LINE = -0.02   # the seam the jaw opens along
 # The tongue must ride ON TOP of the mouth floor, not inside the jaw slab below
@@ -674,15 +681,24 @@ def mat_body_normal(name="MAT_BodyNormal", bump=0.42):
 
 
 def mat_head_scales(name="MAT_HeadScale",
-                    rim=(0.012, 0.052, 0.040),
-                    flank=(0.030, 0.150, 0.092),
-                    mid=(0.075, 0.350, 0.180),
-                    dorsal=(0.195, 0.605, 0.272),
-                    crown=(0.175, 0.275, 0.255),
+                    rim=(0.006, 0.026, 0.021),
+                    flank=(0.012, 0.062, 0.042),
+                    mid=(0.028, 0.130, 0.070),
+                    dorsal=(0.070, 0.230, 0.110),
+                    crown=(0.150, 0.240, 0.225),
                     tint=0.055, bump=0.55,
                     flank_stop=0.26, dorsal_stop=0.60):
     """
     The head's skin, matched to the body's.
+
+    The palette is calibrated to the BODY'S OVERALL AVERAGE, not its stop
+    values. The head is mostly top-facing, so from above nearly all of it
+    renders in the dorsal/mid band — while the body tube shows its near-black
+    flanks across half its width AND is dimmed by the in-game lighting
+    modulate. Matching stop-for-stop therefore bakes a head a full shade
+    lighter than the body it sits on (measured: head 92/139/100 vs body
+    55/92/70 sRGB). These values put the whole-sprite average on the body's
+    number; they look too dark in isolation and correct in context.
 
     Shares the body's scale lattice at the SAME per-cell density, so the skin
     is continuous across the neck instead of the head wearing a visibly
@@ -812,7 +828,7 @@ def build_materials():
 
 def build_cranium(M):
     """Upper head, one solid piece. Sits entirely above the mouth line."""
-    secs = [(y, superellipse(w, ht, 0.06, ridge=_lerp_curve(RIDGE, y)))
+    secs = [(y, superellipse(w * HEAD_W, ht, 0.06, ridge=_lerp_curve(RIDGE, y)))
             for y, w, ht, _hb in resample(CRANIUM, -0.80, NOSE_Y, 26)]
     obj = loft("SNK_Cranium", secs, M["scale"])
     obj.location.z = MOUTH_LINE + 0.06
@@ -821,7 +837,7 @@ def build_cranium(M):
 
 def build_lower_jaw(M):
     """Lower jaw: the belly slab of the head, hinged at the mouth corner."""
-    secs = [(y, superellipse(w * 0.965, 0.02, hb + 0.06))
+    secs = [(y, superellipse(w * HEAD_W * 0.965, 0.02, hb + 0.06))
             for y, w, _ht, hb in resample(CRANIUM, JAW_HINGE_Y - 0.02,
                                           NOSE_Y - 0.01, 14)]
     obj = loft("SNK_Jaw", secs, M["scale"])
@@ -846,14 +862,14 @@ def build_mouth_surfaces(M):
     each one hides inside the opposite, wider half.
     """
     roof = loft("SNK_Palate",
-                [(y, superellipse(w * MOUTH_INSET, 0.05, 0.03))
+                [(y, superellipse(w * HEAD_W * MOUTH_INSET, 0.05, 0.03))
                  for y, w, _ht, _hb in resample(CRANIUM, JAW_HINGE_Y,
                                                 NOSE_Y - 0.05, 12)],
                 M["mouth"], subsurf=1)
     roof.location.z = MOUTH_LINE - 0.01
 
     floor = loft("SNK_MouthFloor",
-                 [(y, superellipse(w * MOUTH_INSET, 0.03, 0.05))
+                 [(y, superellipse(w * HEAD_W * MOUTH_INSET, 0.03, 0.05))
                   for y, w, _ht, _hb in resample(CRANIUM, JAW_HINGE_Y,
                                                  NOSE_Y - 0.05, 12)],
                  M["mouth"], subsurf=1)
@@ -867,7 +883,12 @@ def build_mouth_surfaces(M):
 # corners poking out around the head. It also has to stop just past the second
 # cell centre: any longer and the straight collar juts out of a curving body on
 # a turn, because the head sprite is rigid.
-NECK = [(-0.50, 0.560), (-0.62, 0.532), (-0.75, 0.494), (-0.89, 0.464)]
+# Slimmed with the skull (HEAD_W): the old 0.56 collar stood proud of the
+# 0.44-half-width body tube and read as a bulging neck ring on a small snake.
+# The floor is the game ribbon's own width under the collar — it tapers to
+# ~0.42 half-width by the collar's tail (spineWidth head taper), so 0.44 at
+# the tail still hides it with a whisker to spare.
+NECK = [(-0.50, 0.505), (-0.62, 0.480), (-0.75, 0.458), (-0.89, 0.442)]
 # Height ratios shared with the body tube. Domed rather than flat: a shallow
 # cross-section keeps its normal pointing straight up across nearly the whole
 # width, so the shading never gradates and the body reads as a flat strip.
@@ -888,7 +909,7 @@ def build_throat(M):
     o = prim("primitive_uv_sphere_add", "SNK_Throat", M["throat"],
              radius=1.0, segments=20, ring_count=12,
              location=(0.0, -0.20, MOUTH_LINE - 0.05))
-    o.scale = (0.30, 0.24, 0.11)
+    o.scale = (0.30 * HEAD_W, 0.24, 0.11)
     return o
 
 
@@ -897,14 +918,14 @@ def build_eyes(M):
     for side, tag in ((1, "L"), (-1, "R")):
         eye = prim("primitive_uv_sphere_add", f"SNK_Eye_{tag}", M["eye"],
                    radius=1.0, segments=24, ring_count=16,
-                   location=(side * 0.345, -0.16, 0.300))
+                   location=(side * 0.345 * HEAD_W, -0.16, 0.300))
         eye.scale = (0.200, 0.230, 0.195)
         out.append(eye)
 
         # Slit pupil sitting on TOP of the eyeball so it reads from straight down.
         pup = prim("primitive_uv_sphere_add", f"SNK_Pupil_{tag}", M["pupil"],
                    radius=1.0, segments=16, ring_count=10,
-                   location=(side * 0.352, -0.16, 0.455))
+                   location=(side * 0.352 * HEAD_W, -0.16, 0.455))
         pup.scale = (0.052, 0.125, 0.048)
         out.append(pup)
 
@@ -912,7 +933,7 @@ def build_eyes(M):
         # a flat sticker once the sprite is scaled down to cell size.
         gl = prim("primitive_uv_sphere_add", f"SNK_Glint_{tag}", M["glint"],
                   radius=1.0, segments=12, ring_count=8,
-                  location=(side * 0.300, -0.075, 0.452))
+                  location=(side * 0.300 * HEAD_W, -0.075, 0.452))
         gl.scale = (0.040, 0.048, 0.030)
         out.append(gl)
     return out
@@ -930,7 +951,7 @@ def build_nostrils(M):
     for side, tag in ((1, "L"), (-1, "R")):
         n = prim("primitive_uv_sphere_add", f"SNK_Nostril_{tag}", M["nostril"],
                  radius=1.0, segments=12, ring_count=8,
-                 location=(side * 0.105, 0.600, 0.310))
+                 location=(side * 0.105 * HEAD_W, 0.600, 0.310))
         n.scale = (0.032, 0.048, 0.022)
         n.rotation_euler = (0.0, 0.0, side * math.radians(18.0))
         out.append(n)
@@ -943,7 +964,7 @@ def build_fangs(M):
     for side, tag in ((1, "L"), (-1, "R")):
         f = prim("primitive_cone_add", f"SNK_Fang_{tag}", M["fang"],
                  vertices=14, radius1=0.070, radius2=0.006, depth=0.34,
-                 location=(side * 0.185, 0.54, MOUTH_LINE - 0.10))
+                 location=(side * 0.185 * HEAD_W, 0.54, MOUTH_LINE - 0.10))
         f.rotation_euler = (math.radians(192.0), 0.0, side * math.radians(-7.0))
         out.append(f)
     return out
@@ -959,11 +980,12 @@ def build_tongue(M):
 
     shaft = bar("SNK_Tongue", [(-0.22, 0.0, 0.062), (0.02, 0.0, 0.062),
                                (0.20, 0.0, 0.056), (0.32, 0.0, 0.048)])
+    w = HEAD_W
     forks = [
-        bar("SNK_TongueForkL", [(0.28, 0.024, 0.044), (0.44, 0.088, 0.032),
-                                (0.58, 0.150, 0.018), (0.66, 0.186, 0.005)]),
-        bar("SNK_TongueForkR", [(0.28, -0.024, 0.044), (0.44, -0.088, 0.032),
-                                (0.58, -0.150, 0.018), (0.66, -0.186, 0.005)]),
+        bar("SNK_TongueForkL", [(0.28, 0.024 * w, 0.044), (0.44, 0.088 * w, 0.032),
+                                (0.58, 0.150 * w, 0.018), (0.66, 0.186 * w, 0.005)]),
+        bar("SNK_TongueForkR", [(0.28, -0.024 * w, 0.044), (0.44, -0.088 * w, 0.032),
+                                (0.58, -0.150 * w, 0.018), (0.66, -0.186 * w, 0.005)]),
     ]
 
     bpy.ops.object.select_all(action='DESELECT')

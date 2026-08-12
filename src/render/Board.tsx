@@ -5,10 +5,12 @@ import {
   Fill,
   FractalNoise,
   Group,
+  Image,
   Points,
   RadialGradient,
   Rect,
   RoundedRect,
+  useImage,
   vec,
 } from '@shopify/react-native-skia';
 import type { GridSpec } from '../engine/types';
@@ -42,6 +44,9 @@ function BoardComponent({ gridSpec }: BoardProps) {
   const gridStyle = skin.gridStyle ?? (skin.gridLine !== null ? 'lines' : 'none');
   const boardW = columns * cellSize;
   const boardH = rows * cellSize;
+  // Decoded lazily; until then the boardOrganic gradient below stands in.
+  const backdrop = useImage(require('../../assets/board/backdrop.png'));
+  const showBackdrop = Boolean(skin.boardBackdrop && backdrop);
 
   const cells: React.ReactNode[] = [];
   if (gridStyle === 'lines' && skin.gridLine !== null) {
@@ -93,7 +98,19 @@ function BoardComponent({ gridSpec }: BoardProps) {
   return (
     <Canvas style={StyleSheet.absoluteFill}>
       <Fill color={skin.background} />
-      {skin.boardOrganic && (
+      {showBackdrop && (
+        /* The Blender-rendered ground: pool of light and vignette are baked
+           into the image, so nothing else needs compositing on top of it. */
+        <Image
+          image={backdrop}
+          x={originX}
+          y={originY}
+          width={boardW}
+          height={boardH}
+          fit="cover"
+        />
+      )}
+      {skin.boardOrganic && !showBackdrop && (
         <>
           {/* Pool of light: centre tinted toward the snake's color, edges
               pulled darker than the base so the board has depth before

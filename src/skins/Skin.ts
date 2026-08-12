@@ -23,6 +23,13 @@ export interface Skin {
    * Purely decorative — cell geometry is untouched. Off unless set.
    */
   boardOrganic?: boolean;
+  /**
+   * Draw the pre-rendered Blender ground (assets/board/backdrop.png — a dark
+   * terrarium floor with the pool of light and vignette baked in) across the
+   * board. While the image decodes, the boardOrganic gradient stands in, so
+   * skins setting this should usually set boardOrganic too. Off unless set.
+   */
+  boardBackdrop?: boolean;
   /** Pixel gap between adjacent cells. */
   cellGap: number;
   cellShape: 'square' | 'rounded';

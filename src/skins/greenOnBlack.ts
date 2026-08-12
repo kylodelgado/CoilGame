@@ -18,6 +18,7 @@ export const greenOnBlack: Skin = {
   gridLine: '#0A1F0A',
   gridStyle: 'dots',
   boardOrganic: true,
+  boardBackdrop: true,
   cellGap: 1,
   cellShape: 'square',
   snakeHead: '#7CFC00',

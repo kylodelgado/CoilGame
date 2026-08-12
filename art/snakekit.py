@@ -139,9 +139,11 @@ def _lerp_curve(points, x):
     return points[-1][1]
 
 
-# Strength of the brow ridge along the head's length.
-RIDGE = [(-0.66, 0.0), (-0.44, 0.12), (-0.22, 0.17), (-0.02, 0.14),
-         (0.18, 0.07), (0.36, 0.0)]
+# Strength of the brow ridge along the head's length. Peaks over the eye zone:
+# strong enough that the eyes read as set INTO sockets under a brow, which is
+# most of what separates "reptile skull" from "smooth cone with eyes on it".
+RIDGE = [(-0.66, 0.0), (-0.44, 0.15), (-0.22, 0.22), (-0.02, 0.17),
+         (0.18, 0.08), (0.36, 0.0)]
 
 
 def loft(name, sections, mat=None, smooth=True, subsurf=2):
@@ -423,7 +425,7 @@ def _ramp(nt, val, stops, interp='EASE'):
     return n.outputs["Color"]
 
 
-def _scale_lattice(nt, ox, oy, half):
+def _scale_lattice(nt, ox, oy, rows_per_unit, cols_per_unit, wrap_rows=0):
     """
     A staggered lattice of overlapping scale domes — the imbricated pattern real
     snakes have, and (unlike a voronoi) exactly periodic along the body.
@@ -432,15 +434,24 @@ def _scale_lattice(nt, ox, oy, half):
     scale's POSTERIOR edge sits proudest: scales shingle backwards, and that
     asymmetry is the whole reason a snake's skin reads as directional at all.
     `groove` is the darkening that survives downscaling to sprite size.
+
+    Densities are given per world unit (== per grid cell) rather than per tile,
+    so the head and the body can be handed the SAME numbers and end up with
+    scales of the same physical size. They are different meshes rendered at
+    different framings, and nothing else keeps their skin looking like one
+    animal's.
+
+    `wrap_rows` folds the per-scale tint back on itself for tiling surfaces;
+    pass 0 on anything that does not tile.
     """
     # Row index and the fraction within the row.
-    row = _mth(nt, 'MULTIPLY', oy, SCALE_ROWS / TEX_CELLS)
+    row = _mth(nt, 'MULTIPLY', oy, rows_per_unit)
     ry = _mth(nt, 'WRAP', row, 1.0, 0.0)
     ridx = _mth(nt, 'FLOOR', row)
     # Alternate rows shift half a cell across — that stagger is what makes the
     # lattice read as scales rather than as a chequerboard.
     parity = _mth(nt, 'WRAP', ridx, 2.0, 0.0)
-    col = _mth(nt, 'MULTIPLY', ox, SCALE_COLS / (2.0 * half))
+    col = _mth(nt, 'MULTIPLY', ox, cols_per_unit)
     col = _mth(nt, 'ADD', col, _mth(nt, 'MULTIPLY', parity, 0.5))
     rx = _mth(nt, 'WRAP', col, 1.0, 0.0)
 
@@ -466,7 +477,8 @@ def _scale_lattice(nt, ox, oy, half):
     wn = nt.nodes.new("ShaderNodeTexWhiteNoise")
     wn.noise_dimensions = '2D'
     comb = nt.nodes.new("ShaderNodeCombineXYZ")
-    nt.links.new(_mth(nt, 'WRAP', ridx, SCALE_ROWS, 0.0), comb.inputs["X"])
+    rid = _mth(nt, 'WRAP', ridx, float(wrap_rows), 0.0) if wrap_rows else ridx
+    nt.links.new(rid, comb.inputs["X"])
     nt.links.new(_mth(nt, 'FLOOR', col), comb.inputs["Y"])
     nt.links.new(comb.outputs["Vector"], wn.inputs["Vector"])
     return height, groove, wn.outputs["Value"]
@@ -535,7 +547,7 @@ def mat_body_strip(name="MAT_BodyStrip",
                    saddle=(0.170, 0.270, 0.250),
                    keyline=(0.520, 0.880, 0.450),
                    gloss=(0.760, 0.980, 0.780),
-                   tint=0.055, bump=0.28, key_amt=0.10, saddle_kw=None):
+                   tint=0.055, bump=0.42, key_amt=0.16, saddle_kw=None):
     """
     The body tube's own material — deliberately NOT shared with the head.
 
@@ -572,11 +584,16 @@ def mat_body_strip(name="MAT_BodyStrip",
     # half-width, and the falloff curve becomes something authored rather than
     # inherited from the cross-section.
     xn = _mth(nt, 'DIVIDE', _mth(nt, 'ABSOLUTE', ox), half, clamp=True)
-    form = _ramp(nt, xn, [(0.00, spine), (0.26, dorsal), (0.58, mid),
-                          (0.82, flank), (1.00, rim)], interp='LINEAR')
+    # Mid/flank stops pulled inboard vs the obvious even spacing: the darkening
+    # has to be well under way by two-thirds width or the tube reads flat, and
+    # the eye accepts a much steeper falloff than a real cylinder would give.
+    form = _ramp(nt, xn, [(0.00, spine), (0.24, dorsal), (0.52, mid),
+                          (0.78, flank), (1.00, rim)], interp='LINEAR')
 
     # --- scales -------------------------------------------------------------
-    height, groove, cell_id = _scale_lattice(nt, ox, oy, half)
+    height, groove, cell_id = _scale_lattice(
+        nt, ox, oy, SCALE_ROWS / TEX_CELLS, SCALE_COLS / (2.0 * half),
+        wrap_rows=SCALE_ROWS)
     jitter = _range(nt, cell_id, 0.0, 1.0, 1.0 - tint, 1.0 + tint,
                     interp='LINEAR')
     col = _mix(nt, 1.0, form, jitter, blend='MULTIPLY')
@@ -593,7 +610,7 @@ def mat_body_strip(name="MAT_BodyStrip",
     # the entire dorsal band and takes the scale bump with it, turning the strip
     # milky. Authoring the sheen as an explicit narrow band means its width and
     # strength are exactly what they are set to, and it can never clip.
-    sheen = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.30, 0.02, 0.0, 1.0), 0.34)
+    sheen = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.30, 0.02, 0.0, 1.0), 0.42)
     # Dulled over the blotches — pigment there is matte, and letting the sheen
     # run at full strength across a saddle erases the marking it crosses.
     sheen = _mth(nt, 'MULTIPLY', sheen,
@@ -615,12 +632,160 @@ def mat_body_strip(name="MAT_BodyStrip",
     return m
 
 
+def mat_body_normal(name="MAT_BodyNormal", bump=0.42):
+    """
+    World-normal-as-colour bake material for the body tube, scale bump
+    included: colour = normal * 0.5 + 0.5, emitted flat so lighting cannot
+    touch it. On the rest-pose tube, world axes coincide with the ribbon's
+    tangent frame, so the render IS a tangent-space normal strip: R = across
+    the body, G = along it, B = toward the camera.
+    """
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        if n.type != 'OUTPUT_MATERIAL':
+            nt.nodes.remove(n)
+    out = nt.nodes["Material Output"]
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+
+    half = 0.5 * (1.0 + TEX_BLEED)
+    tex = nt.nodes.new("ShaderNodeTexCoord")
+    obj = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tex.outputs["Object"], obj.inputs[0])
+    height, _groove, _cid = _scale_lattice(
+        nt, obj.outputs["X"], obj.outputs["Y"],
+        SCALE_ROWS / TEX_CELLS, SCALE_COLS / (2.0 * half),
+        wrap_rows=SCALE_ROWS)
+
+    bmp = nt.nodes.new("ShaderNodeBump")
+    bmp.inputs["Strength"].default_value = bump
+    bmp.inputs["Distance"].default_value = 0.022
+    nt.links.new(height, bmp.inputs["Height"])
+
+    enc = nt.nodes.new("ShaderNodeVectorMath")
+    enc.operation = 'MULTIPLY_ADD'
+    enc.inputs[1].default_value = (0.5, 0.5, 0.5)
+    enc.inputs[2].default_value = (0.5, 0.5, 0.5)
+    nt.links.new(bmp.outputs["Normal"], enc.inputs[0])
+    nt.links.new(enc.outputs["Vector"], em.inputs["Color"])
+    return m
+
+
+def mat_head_scales(name="MAT_HeadScale",
+                    rim=(0.012, 0.052, 0.040),
+                    flank=(0.030, 0.150, 0.092),
+                    mid=(0.075, 0.350, 0.180),
+                    dorsal=(0.195, 0.605, 0.272),
+                    crown=(0.175, 0.275, 0.255),
+                    tint=0.055, bump=0.55,
+                    flank_stop=0.26, dorsal_stop=0.60):
+    """
+    The head's skin, matched to the body's.
+
+    Shares the body's scale lattice at the SAME per-cell density, so the skin
+    is continuous across the neck instead of the head wearing a visibly
+    different material. It also carries a dark crown patch, which is what stops
+    a blotched body ending in a plain green head — the two read as one animal
+    only if the head is marked too.
+
+    Unlike the body, the base shading here stays keyed to the world normal and
+    keeps a SHALLOW ramp. The head is a sprite that rears up to strike, and the
+    ramp is camera-relative: a steep one repaints the whole skull a darker green
+    the instant it pitches back, which flickers as the bite animation plays.
+    """
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    if "Specular IOR Level" in bsdf.inputs:
+        bsdf.inputs["Specular IOR Level"].default_value = 0.42
+
+    tex = nt.nodes.new("ShaderNodeTexCoord")
+    obj = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tex.outputs["Object"], obj.inputs[0])
+    ox, oy = obj.outputs["X"], obj.outputs["Y"]
+
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    nrm = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(geo.outputs["Normal"], nrm.inputs[0])
+    form = _ramp(nt, nrm.outputs["Z"],
+                 [(0.02, rim), (flank_stop, flank),
+                  (dorsal_stop, mid), (0.92, dorsal)], interp='B_SPLINE')
+
+    # Wet-gloss roughness: tight highlights on the dorsal surfaces, matte on
+    # the flanks. A single constant roughness is exactly what makes the head
+    # read as moulded rubber — real (and toy) reptiles are shiniest where the
+    # light rakes their back.
+    nt.links.new(_range(nt, nrm.outputs["Z"], 0.30, 1.00, 0.58, 0.30,
+                        interp='LINEAR'), bsdf.inputs["Roughness"])
+
+    height, groove, cell_id = _scale_lattice(
+        nt, ox, oy, SCALE_ROWS / TEX_CELLS, SCALE_COLS / (2.0 * half_unit()))
+    jitter = _range(nt, cell_id, 0.0, 1.0, 1.0 - tint, 1.0 + tint,
+                    interp='LINEAR')
+    col = _mix(nt, 1.0, form, jitter, blend='MULTIPLY')
+    col = _mix(nt, 1.0, col, groove, blend='MULTIPLY')
+
+    # --- cavity darkening -------------------------------------------------
+    # Raytraced AO multiplied into the albedo. The head is all soft convex
+    # forms, so the only places this bites are the eye sockets, under the brow
+    # ridge, the mouth seam and the neck tuck — exactly the crevices that need
+    # to go dark for the shape to read as volume instead of a decal. Floored
+    # well above black so it shades, never outlines.
+    ao = nt.nodes.new("ShaderNodeAmbientOcclusion")
+    ao.inputs["Distance"].default_value = 0.30
+    occ = _range(nt, ao.outputs["AO"], 0.0, 1.0, 0.42, 1.0, interp='LINEAR')
+    col = _mix(nt, 1.0, col, occ, blend='MULTIPLY')
+
+    # --- grazing iridescence ----------------------------------------------
+    # A faint teal shift where the surface turns away from the camera. Kept
+    # weak and DARK so it layers into the flank shading instead of eating the
+    # silhouette rim that gives the sprite its outline.
+    lw = nt.nodes.new("ShaderNodeLayerWeight")
+    lw.inputs["Blend"].default_value = 0.35
+    iri = _mth(nt, 'MULTIPLY', lw.outputs["Facing"], 0.28)
+    col = _mix(nt, iri, col, (0.10, 0.34, 0.40))
+
+    # Crown patch: a broad dark band across the jowls, set just BEHIND the eyes.
+    # Placed over them it would dirty the face and fight the one feature that
+    # has to stay legible at sprite size; sitting behind them it frames the face
+    # and gives the head a marking to answer the body's blotches, so the two
+    # stop looking like different animals.
+    #
+    # Centred at y = -0.34, which is as far back as it can go and still be SEEN:
+    # the skull-base collar occludes the cranium behind roughly y = -0.5, so a
+    # band placed on the actual back of the skull renders entirely inside
+    # geometry the camera never sees.
+    dx = _mth(nt, 'DIVIDE', ox, 1.05)
+    dy = _mth(nt, 'DIVIDE', _mth(nt, 'ADD', oy, 0.34), 0.26)
+    d = _mth(nt, 'SQRT', _mth(nt, 'ADD',
+                              _mth(nt, 'MULTIPLY', dx, dx),
+                              _mth(nt, 'MULTIPLY', dy, dy)))
+    patch = _range(nt, d, 0.62, 1.12, 1.0, 0.0)
+    col = _mix(nt, patch, col, _mix(nt, 1.0, col, crown, blend='MULTIPLY'))
+    nt.links.new(col, bsdf.inputs["Base Color"])
+
+    bmp = nt.nodes.new("ShaderNodeBump")
+    bmp.inputs["Strength"].default_value = bump
+    bmp.inputs["Distance"].default_value = 0.030
+    nt.links.new(height, bmp.inputs["Height"])
+    nt.links.new(bmp.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
+def half_unit():
+    """The body tube's half-width — the reference for scale column density."""
+    return 0.5 * (1.0 + TEX_BLEED)
+
+
 def build_materials():
     return {
         # Head: a SHALLOW ramp (full dorsal by ~50 deg off vertical). The ramp
         # is camera-relative, so a steep one turns the whole head a darker
         # green the moment it rears back to strike.
-        "scale": mat_scales("MAT_Scale", (0.10, 0.47, 0.21), (0.022, 0.155, 0.088)),
+        "scale": mat_head_scales(),
         # Body: a STEEP ramp. The body never tilts, and it needs the shading to
         # gradate right across the tube or it renders as a flat green strip.
         "scale_body": mat_scales("MAT_ScaleBody", (0.10, 0.47, 0.21),
@@ -637,6 +802,7 @@ def build_materials():
         "glint": mat_basic("MAT_Glint", (1.0, 1.0, 1.0), rough=0.05,
                            emit=(1.0, 1.0, 1.0), emit_str=1.4),
         "tongue": mat_basic("MAT_Tongue", (0.93, 0.20, 0.34), rough=0.28),
+        "nostril": mat_basic("MAT_Nostril", (0.015, 0.045, 0.035), rough=0.65),
     }
 
 
@@ -752,6 +918,25 @@ def build_eyes(M):
     return out
 
 
+def build_nostrils(M):
+    """
+    Two small dark pits at the snout tip. Besides the eyes they are the only
+    facial feature a straight-down camera can see, and they anchor which end
+    is the front — without them the closed-mouth head is just a green wedge.
+    Mostly buried in the snout so only a sliver shows: a full dark dot reads
+    as a second pair of eyes at sprite size.
+    """
+    out = []
+    for side, tag in ((1, "L"), (-1, "R")):
+        n = prim("primitive_uv_sphere_add", f"SNK_Nostril_{tag}", M["nostril"],
+                 radius=1.0, segments=12, ring_count=8,
+                 location=(side * 0.105, 0.600, 0.310))
+        n.scale = (0.032, 0.048, 0.022)
+        n.rotation_euler = (0.0, 0.0, side * math.radians(18.0))
+        out.append(n)
+    return out
+
+
 def build_fangs(M):
     """Hang from the upper jaw; swing into view as the head rears."""
     out = []
@@ -863,6 +1048,7 @@ BINDING = {
     "SNK_Eye_L": "head_base", "SNK_Eye_R": "head_base",
     "SNK_Pupil_L": "head_base", "SNK_Pupil_R": "head_base",
     "SNK_Glint_L": "head_base", "SNK_Glint_R": "head_base",
+    "SNK_Nostril_L": "head_base", "SNK_Nostril_R": "head_base",
     "SNK_Fang_L": "head_base", "SNK_Fang_R": "head_base",
     "SNK_Throat": "head_base",
     "SNK_Palate": "head_base",
@@ -1108,6 +1294,32 @@ def render_body_strip(outdir, name="body_tex.png"):
     return name
 
 
+def render_body_normal_strip(outdir, name="body_normal.png"):
+    """
+    Bake the body tube's shading normals into a strip matching body_tex.png
+    pixel-for-pixel. The game does not consume this yet — it exists so a
+    future renderer can light the ribbon dynamically (tilted cameras, moving
+    lights) instead of relying on the shading baked into the colour strip.
+    """
+    import os
+    os.makedirs(outdir, exist_ok=True)
+    sc = bpy.context.scene
+    tube = bpy.data.objects["SNK_BodyTube"]
+    saved = list(tube.data.materials)
+    tube.data.materials.clear()
+    tube.data.materials.append(mat_body_normal())
+    aim_camera(tilt=0.0, ortho=TEX_CELLS, focus=(tube.location.x, 0.0, 0.0))
+    sc.render.resolution_x, sc.render.resolution_y = STRIP_W, STRIP_H
+    sc.render.film_transparent = False
+    sc.render.filepath = os.path.join(outdir, name)
+    bpy.ops.render.render(write_still=True)
+    sc.render.film_transparent = True
+    tube.data.materials.clear()
+    for m in saved:
+        tube.data.materials.append(m)
+    return name
+
+
 def export_sprites(outdir, res_head=320, res_body=256):
     """Render every sprite the game needs plus a manifest describing them."""
     import json
@@ -1155,6 +1367,7 @@ def export_sprites(outdir, res_head=320, res_body=256):
     # The bead and tail-cap meshes stay in the .blend as shape reference, but
     # the game draws the body as one textured ribbon, so they aren't exported.
     render_body_strip(outdir)
+    render_body_normal_strip(outdir)
     sc.render.resolution_x = sc.render.resolution_y = res_body
 
     manifest = {
@@ -1172,7 +1385,13 @@ def export_sprites(outdir, res_head=320, res_body=256):
                                    "mirroring. Do not mirror it: that flips the "
                                    "scales' overlap direction on alternate "
                                    "tiles, pointing the skin backwards down "
-                                   "half the snake."}},
+                                   "half the snake."},
+                 "normal": {"image": "body_normal.png",
+                            "note": "shading normals of the same tube, "
+                                    "colour = normal * 0.5 + 0.5 (sRGB-encoded "
+                                    "PNG), R across / G along / B up. Not "
+                                    "consumed by the game yet — baked for a "
+                                    "future dynamically lit ribbon."}},
     }
     with open(os.path.join(outdir, "snake.json"), "w") as fh:
         json.dump(manifest, fh, indent=2)
@@ -1193,6 +1412,7 @@ def rebuild():
     build_skull_base(M)
     build_throat(M)
     build_eyes(M)
+    build_nostrils(M)
     build_fangs(M)
     tongue = build_tongue(M)
     build_body(M)

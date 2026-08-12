@@ -26,7 +26,11 @@
       "image": "body_tex.png",
       "cells_long": 3.0,
       "u_spans": "the full tube width, edge to edge",
-      "tile": "mirror vertically \u2014 seamless without a periodic pattern"
+      "tile": "REPEAT vertically \u2014 every pattern layer is periodic over the tile, so it tiles without mirroring. Do not mirror it: that flips the scales' overlap direction on alternate tiles, pointing the skin backwards down half the snake."
+    },
+    "normal": {
+      "image": "body_normal.png",
+      "note": "shading normals of the same tube, colour = normal * 0.5 + 0.5 (sRGB-encoded PNG), R across / G along / B up. Not consumed by the game yet \u2014 baked for a future dynamically lit ribbon."
     }
   }
 }

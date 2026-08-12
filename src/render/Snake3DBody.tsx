@@ -1,8 +1,10 @@
 import {
   Blur,
+  Group,
   ImageShader,
   Path,
   Shadow,
+  Skia,
   useImage,
   Vertices,
 } from '@shopify/react-native-skia';
@@ -10,8 +12,11 @@ import { useDerivedValue } from 'react-native-reanimated';
 import { mix, toRgb } from './color';
 import { clamp01 } from './interpolate';
 import {
+  BODY_LIGHT,
+  buildSheen,
   computeSpine,
-  meshFromSpine,
+  litMeshFromSpine,
+  spineLength,
   tubeFromSpine,
   type Spine,
 } from './snakeRibbon';
@@ -64,6 +69,12 @@ const WAVE_HZ_SLOW = 0.55;
 const WAVE_HZ_FAST = 1.7;
 /** Peak muscle swell, as a fraction of body width. */
 const WAVE_SWELL = 0.055;
+
+/** Travelling gloss: window half-length in cells, width, and one pass in ms. */
+const SHEEN_HALF_CELLS = 2.4;
+const SHEEN_WIDTH = 0.34;
+const SHEEN_MS = 2600;
+const SHEEN_COLOR = 'rgba(214, 255, 226, 0.30)';
 
 interface Snake3DBodyProps {
   /** Shared glide state (clock + endpoints + timing) from useSnakeGlide. */
@@ -126,16 +137,35 @@ export function Snake3DBody({
 
   const mesh = useDerivedValue(() => {
     'worklet';
-    return meshFromSpine(
+    return litMeshFromSpine(
       spine.value,
       baseHw,
       texW,
       texH,
       TEX_CELLS * cellSize,
+      BODY_LIGHT,
     );
   });
   const verts = useDerivedValue(() => mesh.value.verts);
   const uvs = useDerivedValue(() => mesh.value.uvs);
+  const lightCols = useDerivedValue(() => mesh.value.colors);
+  const specCols = useDerivedValue(() => mesh.value.specs);
+  const indices = useDerivedValue(() => mesh.value.indices);
+
+  // The window starts a full half-length BEFORE the head and ends that far past
+  // the tail, so the highlight slides on and off the body instead of appearing
+  // and vanishing mid-back.
+  const sheenHalf = SHEEN_HALF_CELLS * cellSize;
+  const sheen = useDerivedValue(() => {
+    'worklet';
+    const total = spineLength(spine.value);
+    if (total <= 0) {
+      return Skia.Path.Make();
+    }
+    const u = (clock.value % SHEEN_MS) / SHEEN_MS;
+    const centre = -sheenHalf + u * (total + 2 * sheenHalf);
+    return buildSheen(spine.value, baseHw, centre, sheenHalf, SHEEN_WIDTH);
+  });
 
   const glowAmt = Math.max(0, Math.min(1, (glow - GLOW_START) / (1 - GLOW_START)));
   const hot = toRgb(mix(DORSAL, '#FF5A1A', glowAmt));
@@ -177,22 +207,52 @@ export function Snake3DBody({
         )}
       </Path>
       {tex && (
-        <Vertices mode="triangleStrip" vertices={verts} textures={uvs}>
-          <ImageShader
-            image={tex}
-            tx="clamp"
-            /* REPEAT, not mirror: every layer of the strip is periodic over the
-               tile, so it already joins seamlessly. Mirroring would flip the
-               scales' overlap direction on alternate tiles, pointing the skin
-               backwards down half the snake. */
-            ty="repeat"
-            fit="none"
-            x={0}
-            y={0}
-            width={texW}
-            height={texH}
-          />
-        </Vertices>
+        <>
+          {/* Textured body, modulated by per-vertex dynamic lighting: the
+              flank facing the light lifts and the far flank drops, per
+              segment, so the shading tracks every turn instead of being
+              frozen into the strip. */}
+          <Vertices
+            mode="triangles"
+            vertices={verts}
+            textures={uvs}
+            colors={lightCols}
+            indices={indices}
+            blendMode="modulate"
+          >
+            <ImageShader
+              image={tex}
+              tx="clamp"
+              /* REPEAT, not mirror: every layer of the strip is periodic over
+                 the tile, so it already joins seamlessly. Mirroring would flip
+                 the scales' overlap direction on alternate tiles, pointing the
+                 skin backwards down half the snake. */
+              ty="repeat"
+              fit="none"
+              x={0}
+              y={0}
+              width={texW}
+              height={texH}
+            />
+          </Vertices>
+          {/* Additive specular from the same mesh — a directional wet
+              highlight that belongs to the LIGHT, sliding around the tube as
+              the body changes heading beneath it. */}
+          <Group blendMode="plus">
+            <Vertices
+              mode="triangles"
+              vertices={verts}
+              colors={specCols}
+              indices={indices}
+            />
+          </Group>
+          {/* Drawn last so it reads as light ON the skin. Blurred by roughly
+              its own width — a crisp-edged highlight looks like a decal stuck
+              to the body rather than a reflection moving over it. */}
+          <Path path={sheen} color={SHEEN_COLOR}>
+            <Blur blur={cellSize * 0.16} />
+          </Path>
+        </>
       )}
     </>
   );

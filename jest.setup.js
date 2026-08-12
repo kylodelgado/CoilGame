@@ -84,7 +84,11 @@ jest.mock('@shopify/react-native-skia', () => {
     ImageShader: passthrough(),
     Line: passthrough(),
     LinearGradient: passthrough(),
+    RadialGradient: passthrough(),
+    FractalNoise: passthrough(),
+    Points: passthrough(),
     Shadow: passthrough(),
+    Blur: passthrough(),
     vec: (x, y) => ({ x, y }),
     useClock: () => ({ value: 0 }),
     // Stand in for a decoded SkImage so sprite-backed trees mount.

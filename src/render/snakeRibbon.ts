@@ -697,6 +697,154 @@ export function meshFromSpine(
   return { verts, uvs };
 }
 
+// --------------------------------------------------------------------------
+// dynamic lighting (the 3D renderer)
+// --------------------------------------------------------------------------
+
+/**
+ * Cross positions of the lit mesh's vertex columns, -1..1 across the tube.
+ * Five columns is the minimum that lets a specular peak sit BETWEEN the centre
+ * and an edge — with three, the highlight can only live exactly on the spine
+ * or the silhouette, and it visibly snaps between them as the snake turns.
+ */
+const LIT_COLS = [-1, -0.55, 0, 0.55, 1];
+
+/** A screen-space directional light for the per-vertex lit body mesh. */
+export interface LightRig {
+  /** Unit direction TOWARD the light (x right, y down, z out of the screen). */
+  lx: number;
+  ly: number;
+  lz: number;
+  /** Brightness multiplier where the light misses entirely (0..1). */
+  ambient: number;
+  /** Extra brightness at full incidence; keep ambient + diffuse ≈ 1. */
+  diffuse: number;
+  /** Peak additive specular strength (0..1). */
+  specular: number;
+  /** Specular exponent — higher = tighter, wetter highlight. */
+  shininess: number;
+}
+
+/**
+ * The default rig, matched to the game's contact shadow: the shadow is offset
+ * down-right, so the light comes from the upper-left. The z component keeps it
+ * mostly overhead — the baked strip already carries strong side shading, and
+ * this layer only has to make it RESPOND to heading, not recreate it.
+ */
+export const BODY_LIGHT: LightRig = (() => {
+  const x = -0.35;
+  const y = -0.46;
+  const z = 0.82;
+  const l = Math.sqrt(x * x + y * y + z * z);
+  return {
+    lx: x / l,
+    ly: y / l,
+    lz: z / l,
+    ambient: 0.74,
+    diffuse: 0.36,
+    specular: 0.34,
+    shininess: 22,
+  };
+})();
+
+/**
+ * Like meshFromSpine, but an indexed triangle mesh with LIT_COLS columns per
+ * sample and two per-vertex color arrays:
+ *
+ *   `colors` — a diffuse multiplier (drawn with blendMode "modulate" over the
+ *   strip texture), computed by lighting the tube's actual 3D cross-section
+ *   normal (c, sqrt(1-c^2) rotated into screen space by the spine frame).
+ *   This is what the baked strip cannot do: as the body bends, the flank
+ *   facing the light brightens and the far flank falls off, per segment.
+ *
+ *   `specs` — an additive specular term from the same normals (drawn as a
+ *   second Vertices pass under blendMode "plus"), a wet highlight that stays
+ *   with the LIGHT while the skin slides beneath it.
+ *
+ * The lighting is per-vertex rather than per-pixel by necessity: drawVertices
+ * gives a fragment shader no way to learn the ribbon's local frame (UVs are
+ * spent on the texture, vertex colors never reach the shader), so the
+ * normal-map strip cannot be relit correctly in Skia. Five true-normal columns
+ * across a smooth tube interpolate close enough that the difference is
+ * invisible at cell size.
+ */
+export function litMeshFromSpine(
+  sp: Spine,
+  baseHw: number,
+  texW: number,
+  texH: number,
+  tileLenPx: number,
+  light: LightRig,
+) {
+  'worklet';
+  const verts: { x: number; y: number }[] = [];
+  const uvs: { x: number; y: number }[] = [];
+  const colors: number[] = [];
+  const specs: number[] = [];
+  const indices: number[] = [];
+  const { xs, ys, nxs, nys, wf, wave, swell, arc, runStart, runEnd } = sp;
+  const nCols = LIT_COLS.length;
+
+  // Half vector between the light and the straight-down view direction.
+  let hx = light.lx;
+  let hy = light.ly;
+  let hz = light.lz + 1;
+  const hl = Math.sqrt(hx * hx + hy * hy + hz * hz) || 1;
+  hx /= hl;
+  hy /= hl;
+  hz /= hl;
+
+  for (let r = 0; r < runStart.length; r++) {
+    const s = runStart[r];
+    const e = runEnd[r];
+    if (e <= s) {
+      continue;
+    }
+    for (let k = s; k <= e; k++) {
+      const hw = baseHw * wf[k] * swell[k];
+      const v = (arc[k] / tileLenPx) * texH;
+      const row = verts.length;
+      for (let ci = 0; ci < nCols; ci++) {
+        const c = LIT_COLS[ci];
+        verts.push({
+          x: xs[k] + nxs[k] * (wave[k] + c * hw),
+          y: ys[k] + nys[k] * (wave[k] + c * hw),
+        });
+        // Same orientation as meshFromSpine: the +normal edge carries u = 0.
+        uvs.push({ x: (0.5 - c * 0.5) * texW, y: v });
+
+        // Semicircular cross-section: at fraction c the outward normal is
+        // (c * n, sqrt(1 - c^2)) — horizontal at the silhouette, straight up
+        // on the spine.
+        const nz = Math.sqrt(Math.max(0, 1 - c * c));
+        const nx3 = nxs[k] * c;
+        const ny3 = nys[k] * c;
+
+        const d = Math.max(0, nx3 * light.lx + ny3 * light.ly + nz * light.lz);
+        let iy = light.ambient + light.diffuse * d;
+        iy = iy > 1 ? 1 : iy;
+        const ib = Math.round(iy * 255);
+        colors.push(((0xff << 24) | (ib << 16) | (ib << 8) | ib) >>> 0);
+
+        const sd = Math.max(0, nx3 * hx + ny3 * hy + nz * hz);
+        let sv = Math.pow(sd, light.shininess) * light.specular;
+        sv = sv > 1 ? 1 : sv;
+        // Premultiplied white: alpha rides along so "plus" stays valid premul.
+        const sb = Math.round(sv * 255);
+        specs.push(((sb << 24) | (sb << 16) | (sb << 8) | sb) >>> 0);
+      }
+      if (k > s) {
+        const prev = row - nCols;
+        for (let ci = 0; ci < nCols - 1; ci++) {
+          indices.push(prev + ci, row + ci, prev + ci + 1);
+          indices.push(prev + ci + 1, row + ci, row + ci + 1);
+        }
+      }
+    }
+  }
+  return { verts, uvs, colors, specs, indices };
+}
+
 /**
  * One closed outline per run, offset `baseHw * wf * widthScale` either side of
  * the spine and closed with a round cap at each end.
@@ -758,6 +906,82 @@ export function tubeFromSpine(sp: Spine, baseHw: number, widthScale: number) {
     path.close();
   }
   return path;
+}
+
+/**
+ * A narrow dorsal highlight occupying a window of the body that slides tailward
+ * — light playing over a wet, moving animal.
+ *
+ * The strip texture already carries a static gloss line down the spine, which
+ * gives the body its roundness but is, by construction, motionless: it is
+ * pinned to the skin, so it travels WITH the snake and never across it. This
+ * adds the part real specular has and a baked texture cannot — a highlight that
+ * belongs to the light rather than to the surface.
+ *
+ * Width tapers to nothing at both ends of the window, so the band closes itself
+ * into a lens and needs no cap; a hard-edged window would read as a rectangle
+ * of paint sliding along the body.
+ */
+export function buildSheen(
+  sp: Spine,
+  baseHw: number,
+  centre: number,
+  half: number,
+  widthScale: number,
+) {
+  'worklet';
+  const path = Skia.Path.Make();
+  if (half <= 0) {
+    return path;
+  }
+  const { xs, ys, nxs, nys, wf, wave, swell, arc, runStart, runEnd } = sp;
+  const fade = (k: number) => {
+    const d = Math.abs(arc[k] - centre) / half;
+    if (d >= 1) {
+      return 0;
+    }
+    const u = 1 - d;
+    return u * u * (3 - 2 * u);
+  };
+  const hwAt = (k: number) =>
+    baseHw * wf[k] * swell[k] * widthScale * fade(k);
+  const cxAt = (k: number) => xs[k] + nxs[k] * wave[k];
+  const cyAt = (k: number) => ys[k] + nys[k] * wave[k];
+
+  for (let r = 0; r < runStart.length; r++) {
+    const s = runStart[r];
+    const e = runEnd[r];
+    let k = s;
+    while (k <= e) {
+      while (k <= e && fade(k) <= 0) {
+        k++;
+      }
+      const a = k;
+      while (k <= e && fade(k) > 0) {
+        k++;
+      }
+      const b = k - 1;
+      if (b <= a) {
+        continue;
+      }
+      path.moveTo(cxAt(a) + nxs[a] * hwAt(a), cyAt(a) + nys[a] * hwAt(a));
+      for (let i = a + 1; i <= b; i++) {
+        path.lineTo(cxAt(i) + nxs[i] * hwAt(i), cyAt(i) + nys[i] * hwAt(i));
+      }
+      for (let i = b; i >= a; i--) {
+        path.lineTo(cxAt(i) - nxs[i] * hwAt(i), cyAt(i) - nys[i] * hwAt(i));
+      }
+      path.close();
+    }
+  }
+  return path;
+}
+
+/** Total traced length in px — the sheen window travels over this. */
+export function spineLength(sp: Spine): number {
+  'worklet';
+  const n = sp.arc.length;
+  return n === 0 ? 0 : sp.arc[n - 1];
 }
 
 /** Segments inside a window that travels head↔tail over time (shimmer). */

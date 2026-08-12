@@ -9,6 +9,20 @@ export interface Skin {
   background: string;
   /** Grid line color, or null for no grid lines. */
   gridLine: string | null;
+  /**
+   * How the grid reads: 'lines' strokes every cell (the classic look), 'dots'
+   * marks only the interior intersections — enough for the player to aim by,
+   * without the graph-paper feel — and 'none' hides it entirely. Optional so
+   * existing skins keep their behavior: defaults to 'lines' when gridLine is
+   * set, 'none' when it is null.
+   */
+  gridStyle?: 'lines' | 'dots' | 'none';
+  /**
+   * Organic board treatment: a soft center light tinted toward the snake's
+   * color, an edge vignette, and a whisper of noise grain over the background.
+   * Purely decorative — cell geometry is untouched. Off unless set.
+   */
+  boardOrganic?: boolean;
   /** Pixel gap between adjacent cells. */
   cellGap: number;
   cellShape: 'square' | 'rounded';

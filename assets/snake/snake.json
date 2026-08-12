@@ -24,7 +24,7 @@
   "body": {
     "strip": {
       "image": "body_tex.png",
-      "cells_long": 2.0,
+      "cells_long": 3.0,
       "u_spans": "the full tube width, edge to edge",
       "tile": "mirror vertically \u2014 seamless without a periodic pattern"
     }

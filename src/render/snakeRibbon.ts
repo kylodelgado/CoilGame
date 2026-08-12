@@ -380,6 +380,39 @@ const HEAD_MIN = 0.3;
 const TIP_STEPS = 3;
 const TIP_CELLS = 0.5;
 
+/**
+ * Lateral travelling wave laid over the traced centreline.
+ *
+ * A snake on a square grid is otherwise a rigid pipe: it only ever runs dead
+ * straight or turns ninety degrees, and nothing about it moves except its
+ * position. Undulating the body sideways is what turns that pipe into an animal
+ * pushing itself along, and it costs one sine per sample.
+ */
+export interface Undulation {
+  /** Animation clock, ms. */
+  clock: number;
+  /** Peak lateral offset, in cells. 0 disables the whole effect. */
+  amp: number;
+  /** Wavelength along the body, in cells. */
+  wavelength: number;
+  /** Waves travelling tailward per second. */
+  hz: number;
+  /** Peak width swell, as a fraction (0.06 == +/-6%). */
+  swell: number;
+}
+
+/**
+ * Cells over which the wave fades in behind the head.
+ *
+ * The head must stay pinned exactly to its own cell — it is drawn by a separate
+ * sprite that positions itself straight from the grid, and it is also what the
+ * player reads collisions against. So the amplitude starts at zero on the head
+ * and only reaches full a couple of cells back, which is how a real snake moves
+ * anyway: the head tracks, the body follows.
+ */
+const WAVE_HEAD_HOLD = 0.6;
+const WAVE_HEAD_RAMP = 2.2;
+
 /** A traced centreline: positions, frames, and the width factor at each sample. */
 export interface Spine {
   xs: number[];
@@ -392,6 +425,15 @@ export interface Spine {
   tys: number[];
   /** Width multiplier 0..1 per sample. */
   wf: number[];
+  /**
+   * Lateral offset in px per sample, along that sample's normal. Applied by the
+   * mesh/outline builders rather than baked into xs/ys, so `arc` and the frames
+   * stay measured on the true centreline — the texture must not stretch and
+   * squash as the body waves.
+   */
+  wave: number[];
+  /** Width multiplier from the muscle swell, ~1 per sample. */
+  swell: number[];
   /**
    * Distance travelled along the body in px, used as the texture's V axis.
    * Wrap jumps are NOT added, so the pattern keeps flowing down the snake
@@ -433,6 +475,7 @@ export function computeSpine(
   t: number,
   origin: { x: number; y: number },
   cellSize: number,
+  und: Undulation | null = null,
 ): Spine {
   'worklet';
   const xs: number[] = [];
@@ -442,12 +485,16 @@ export function computeSpine(
   const txs: number[] = [];
   const tys: number[] = [];
   const wf: number[] = [];
+  const wave: number[] = [];
+  const swell: number[] = [];
   const arc: number[] = [];
   const runStart: number[] = [];
   const runEnd: number[] = [];
   const n = to.length;
   if (n === 0) {
-    return { xs, ys, nxs, nys, txs, tys, wf, arc, runStart, runEnd };
+    return {
+      xs, ys, nxs, nys, txs, tys, wf, wave, swell, arc, runStart, runEnd,
+    };
   }
 
   const cx: number[] = [];
@@ -562,7 +609,33 @@ export function computeSpine(
       nys.push(tx);
     }
   }
-  return { xs, ys, nxs, nys, txs, tys, wf, arc, runStart, runEnd };
+
+  // Travelling wave. Phase runs off `arc`, so the wave is anchored to the BODY
+  // rather than to the world: a crest stays on the same stretch of snake and
+  // travels tailward through it, which is how the animal actually pushes
+  // itself along. Keying it to world position instead would make the body
+  // shimmy in place as it slid past a fixed pattern.
+  const hold = WAVE_HEAD_HOLD * cellSize;
+  const ramp = WAVE_HEAD_RAMP * cellSize;
+  const ampPx = und ? und.amp * cellSize : 0;
+  const k = und ? (2 * Math.PI) / (und.wavelength * cellSize) : 0;
+  const wt = und ? (und.clock / 1000) * und.hz * 2 * Math.PI : 0;
+  for (let idx = 0; idx < xs.length; idx++) {
+    if (!und || ampPx <= 0) {
+      wave.push(0);
+      swell.push(1);
+      continue;
+    }
+    let g = (arc[idx] - hold) / ramp;
+    g = g <= 0 ? 0 : g >= 1 ? 1 : g;
+    g = g * g * (3 - 2 * g);
+    const phase = arc[idx] * k - wt;
+    wave.push(Math.sin(phase) * ampPx * g);
+    // Swell runs at twice the wave's frequency: the body is thickest where it
+    // is bent hardest, which happens at both extremes of every crest.
+    swell.push(1 + und.swell * g * Math.cos(2 * phase));
+  }
+  return { xs, ys, nxs, nys, txs, tys, wf, wave, swell, arc, runStart, runEnd };
 }
 
 /**
@@ -584,7 +657,7 @@ export function meshFromSpine(
   'worklet';
   const verts: { x: number; y: number }[] = [];
   const uvs: { x: number; y: number }[] = [];
-  const { xs, ys, nxs, nys, wf, arc, runStart, runEnd } = sp;
+  const { xs, ys, nxs, nys, wf, wave, swell, arc, runStart, runEnd } = sp;
   for (let r = 0; r < runStart.length; r++) {
     const s = runStart[r];
     const e = runEnd[r];
@@ -594,18 +667,30 @@ export function meshFromSpine(
     if (verts.length > 0) {
       const prev = verts[verts.length - 1];
       const prevUv = uvs[uvs.length - 1];
-      const hw0 = baseHw * wf[s];
+      const hw0 = baseHw * wf[s] * swell[s];
       verts.push({ x: prev.x, y: prev.y });
       uvs.push({ x: prevUv.x, y: prevUv.y });
-      verts.push({ x: xs[s] + nxs[s] * hw0, y: ys[s] + nys[s] * hw0 });
+      verts.push({
+        x: xs[s] + nxs[s] * (wave[s] + hw0),
+        y: ys[s] + nys[s] * (wave[s] + hw0),
+      });
       uvs.push({ x: 0, y: (arc[s] / tileLenPx) * texH });
     }
     for (let k = s; k <= e; k++) {
-      const hw = baseHw * wf[k];
+      const hw = baseHw * wf[k] * swell[k];
       const v = (arc[k] / tileLenPx) * texH;
-      verts.push({ x: xs[k] + nxs[k] * hw, y: ys[k] + nys[k] * hw });
+      // The wave shifts both edges together, so the ribbon slides sideways
+      // rather than widening — and V still comes from the untouched arc, which
+      // keeps the skin from stretching as the body flexes.
+      verts.push({
+        x: xs[k] + nxs[k] * (wave[k] + hw),
+        y: ys[k] + nys[k] * (wave[k] + hw),
+      });
       uvs.push({ x: 0, y: v });
-      verts.push({ x: xs[k] - nxs[k] * hw, y: ys[k] - nys[k] * hw });
+      verts.push({
+        x: xs[k] + nxs[k] * (wave[k] - hw),
+        y: ys[k] + nys[k] * (wave[k] - hw),
+      });
       uvs.push({ x: texW, y: v });
     }
   }
@@ -623,21 +708,25 @@ export function meshFromSpine(
 export function tubeFromSpine(sp: Spine, baseHw: number, widthScale: number) {
   'worklet';
   const path = Skia.Path.Make();
-  const { xs, ys, nxs, nys, txs, tys, wf, runStart, runEnd } = sp;
-  const hwAt = (k: number) => baseHw * wf[k] * widthScale;
+  const { xs, ys, nxs, nys, txs, tys, wf, wave, swell, runStart, runEnd } = sp;
+  const hwAt = (k: number) => baseHw * wf[k] * swell[k] * widthScale;
+  // Centreline displaced by the wave — the outline has to ride exactly the same
+  // curve as the textured mesh or a dark crescent shows along one flank.
+  const cxAt = (k: number) => xs[k] + nxs[k] * wave[k];
+  const cyAt = (k: number) => ys[k] + nys[k] * wave[k];
 
   for (let r = 0; r < runStart.length; r++) {
     const s = runStart[r];
     const e = runEnd[r];
     if (s === e) {
-      path.addCircle(xs[s], ys[s], Math.max(0.5, hwAt(s)));
+      path.addCircle(cxAt(s), cyAt(s), Math.max(0.5, hwAt(s)));
       continue;
     }
     let hw = hwAt(s);
-    path.moveTo(xs[s] + nxs[s] * hw, ys[s] + nys[s] * hw);
+    path.moveTo(cxAt(s) + nxs[s] * hw, cyAt(s) + nys[s] * hw);
     for (let k = s + 1; k <= e; k++) {
       hw = hwAt(k);
-      path.lineTo(xs[k] + nxs[k] * hw, ys[k] + nys[k] * hw);
+      path.lineTo(cxAt(k) + nxs[k] * hw, cyAt(k) + nys[k] * hw);
     }
     // Tail cap: left -> forward -> right.
     hw = hwAt(e);
@@ -646,14 +735,14 @@ export function tubeFromSpine(sp: Spine, baseHw: number, widthScale: number) {
       const c = Math.cos(th);
       const sn = Math.sin(th);
       path.lineTo(
-        xs[e] + hw * (c * nxs[e] + sn * txs[e]),
-        ys[e] + hw * (c * nys[e] + sn * tys[e]),
+        cxAt(e) + hw * (c * nxs[e] + sn * txs[e]),
+        cyAt(e) + hw * (c * nys[e] + sn * tys[e]),
       );
     }
-    path.lineTo(xs[e] - nxs[e] * hw, ys[e] - nys[e] * hw);
+    path.lineTo(cxAt(e) - nxs[e] * hw, cyAt(e) - nys[e] * hw);
     for (let k = e - 1; k >= s; k--) {
       hw = hwAt(k);
-      path.lineTo(xs[k] - nxs[k] * hw, ys[k] - nys[k] * hw);
+      path.lineTo(cxAt(k) - nxs[k] * hw, cyAt(k) - nys[k] * hw);
     }
     // Head cap: right -> backward -> left, then close.
     hw = hwAt(s);
@@ -662,8 +751,8 @@ export function tubeFromSpine(sp: Spine, baseHw: number, widthScale: number) {
       const c = Math.cos(th);
       const sn = Math.sin(th);
       path.lineTo(
-        xs[s] - hw * (c * nxs[s] + sn * txs[s]),
-        ys[s] - hw * (c * nys[s] + sn * tys[s]),
+        cxAt(s) - hw * (c * nxs[s] + sn * txs[s]),
+        cyAt(s) - hw * (c * nys[s] + sn * tys[s]),
       );
     }
     path.close();

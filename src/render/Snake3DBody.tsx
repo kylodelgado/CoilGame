@@ -1,4 +1,5 @@
 import {
+  Blur,
   ImageShader,
   Path,
   Shadow,
@@ -20,11 +21,11 @@ import type { SnakeGlide } from './useSnakeGlide';
  * Body length, in cells, covered by one tile of the strip texture. Must match
  * `body.strip.cells_long` in assets/snake/snake.json.
  */
-const TEX_CELLS = 2.0;
+const TEX_CELLS = 3.0;
 
 /** Fallbacks used for the one frame before the texture finishes decoding. */
-const TEX_W = 192;
-const TEX_H = 384;
+const TEX_W = 256;
+const TEX_H = 768;
 
 /**
  * Body half-width in cells. Kept just under the head sprite's neck collar
@@ -38,12 +39,31 @@ const BODY_HALF_WIDTH = 0.44;
  * Drawn as an antialiased path under the mesh: drawVertices has no
  * antialiasing, so without this the body's edge is visibly stair-stepped.
  */
-const RIM = '#1E2F2C';
+const RIM = '#0C1816';
 /** Dorsal green, for the speed glow's hot mix and the pre-decode fallback. */
 const DORSAL = '#6AC189';
 
 /** When the speed glow starts ramping in (fraction of the speed range). */
 const GLOW_START = 0.3;
+
+/**
+ * Undulation: lateral offset in cells, wavelength in cells, and tailward waves
+ * per second, at rest and flat out.
+ *
+ * Amplitude is deliberately small. The snake has to keep reading as something
+ * that occupies grid cells — the player aims it at food a cell at a time — so
+ * the wave is there to make the body look driven rather than to actually move
+ * it off its line. Past about a tenth of a cell it stops looking like muscle
+ * and starts looking like the renderer is out of sync with the grid.
+ */
+const WAVE_AMP_SLOW = 0.055;
+const WAVE_AMP_FAST = 0.10;
+const WAVE_LEN_SLOW = 4.2;
+const WAVE_LEN_FAST = 3.2;
+const WAVE_HZ_SLOW = 0.55;
+const WAVE_HZ_FAST = 1.7;
+/** Peak muscle swell, as a fraction of body width. */
+const WAVE_SWELL = 0.055;
 
 interface Snake3DBodyProps {
   /** Shared glide state (clock + endpoints + timing) from useSnakeGlide. */
@@ -78,11 +98,25 @@ export function Snake3DBody({
   const texW = tex ? tex.width() : TEX_W;
   const texH = tex ? tex.height() : TEX_H;
 
+  // The snake works harder the faster it goes: a longer, lazier wave when it is
+  // crawling, tightening and quickening as it winds up. Tying this to the same
+  // `glow` fraction that drives the heat glow means the body's motion and its
+  // colour escalate together instead of drifting apart.
+  const amp = WAVE_AMP_SLOW + (WAVE_AMP_FAST - WAVE_AMP_SLOW) * glow;
+  const wavelength = WAVE_LEN_SLOW + (WAVE_LEN_FAST - WAVE_LEN_SLOW) * glow;
+  const hz = WAVE_HZ_SLOW + (WAVE_HZ_FAST - WAVE_HZ_SLOW) * glow;
+
   // Trace the centreline ONCE per frame; the outline and the mesh share it.
   const spine = useDerivedValue<Spine>(() => {
     'worklet';
     const t = clamp01((clock.value - start.value) / duration.value);
-    return computeSpine(from.value, to.value, t, origin, cellSize);
+    return computeSpine(from.value, to.value, t, origin, cellSize, {
+      clock: clock.value,
+      amp,
+      wavelength,
+      hz,
+      swell: WAVE_SWELL,
+    });
   });
 
   const outline = useDerivedValue(() => {
@@ -123,6 +157,20 @@ export function Snake3DBody({
 
   return (
     <>
+      {/* Contact shadow. Offset down-right and blurred, drawn beneath
+          everything else, so the body sits ON the board instead of being
+          painted onto it. It is the cheapest depth cue available here and it
+          does more for the 3D read than any amount of shading on the tube. */}
+      <Path
+        path={outline}
+        color="rgba(0, 0, 0, 0.34)"
+        transform={[
+          { translateX: cellSize * 0.10 },
+          { translateY: cellSize * 0.13 },
+        ]}
+      >
+        <Blur blur={cellSize * 0.11} />
+      </Path>
       <Path path={outline} color={tex ? RIM : DORSAL}>
         {glowAmt > 0.01 && (
           <Shadow dx={0} dy={0} blur={glowBlur} color={glowColor} />
@@ -133,7 +181,11 @@ export function Snake3DBody({
           <ImageShader
             image={tex}
             tx="clamp"
-            ty="mirror"
+            /* REPEAT, not mirror: every layer of the strip is periodic over the
+               tile, so it already joins seamlessly. Mirroring would flip the
+               scales' overlap direction on alternate tiles, pointing the skin
+               backwards down half the snake. */
+            ty="repeat"
             fit="none"
             x={0}
             y={0}

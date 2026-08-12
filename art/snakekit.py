@@ -341,6 +341,280 @@ def mat_scales(name, dorsal, flank, rim=(0.02, 0.09, 0.06),
     return m
 
 
+# --------------------------------------------------------------------------
+# body strip material
+# --------------------------------------------------------------------------
+
+# The strip texture tiles every TEX_CELLS along the body. Everything patterned
+# below is built from periodic functions of object Y with a period that divides
+# TEX_CELLS exactly, so the strip is seamless under plain REPEAT tiling. That
+# matters beyond tidiness: mirror tiling flips the scales' overlap direction on
+# every other tile, so the snake's skin visibly points the wrong way half the
+# time.
+# SCALE_ROWS must be EVEN, not merely an integer: alternate rows are staggered
+# half a cell sideways, so an odd row count lands opposite parities on the two
+# ends of the tile and puts a visible half-cell jog in the lattice at the seam.
+SCALE_ROWS = 38        # scale rows per tile (even -> seamless)
+SCALE_COLS = 19        # scale columns across the tube's full width
+SCALE_AX = 0.60        # scale dome radius across, as a fraction of its cell
+SCALE_AY = 0.66        # ...and along the body
+# Blotches per tile. This is also how many DISTINCT blotches exist before the
+# pattern repeats, since the jitter is keyed off the band index — hence a tile
+# spanning three cells rather than two.
+SADDLE_BANDS = 3       # dorsal saddle blotches per tile (integer -> seamless)
+
+
+def _mth(nt, op, a, b=None, c=None, clamp=False):
+    """One Math node, with unlinked inputs taking plain floats."""
+    n = nt.nodes.new("ShaderNodeMath")
+    n.operation = op
+    n.use_clamp = clamp
+    for i, v in enumerate((a, b, c)):
+        if v is None:
+            continue
+        if isinstance(v, (int, float)):
+            n.inputs[i].default_value = float(v)
+        else:
+            nt.links.new(v, n.inputs[i])
+    return n.outputs[0]
+
+
+def _range(nt, val, fmin, fmax, tmin, tmax, interp='SMOOTHSTEP'):
+    """Map Range node — the workhorse for every smoothstep below."""
+    n = nt.nodes.new("ShaderNodeMapRange")
+    n.interpolation_type = interp
+    n.clamp = True
+    nt.links.new(val, n.inputs["Value"])
+    for name, v in (("From Min", fmin), ("From Max", fmax),
+                    ("To Min", tmin), ("To Max", tmax)):
+        if isinstance(v, (int, float)):
+            n.inputs[name].default_value = float(v)
+        else:
+            nt.links.new(v, n.inputs[name])
+    return n.outputs["Result"]
+
+
+def _mix(nt, fac, a, b, blend='MIX'):
+    """MixRGB node; a/b may be sockets or RGB tuples."""
+    n = nt.nodes.new("ShaderNodeMixRGB")
+    n.blend_type = blend
+    if isinstance(fac, (int, float)):
+        n.inputs[0].default_value = float(fac)
+    else:
+        nt.links.new(fac, n.inputs[0])
+    for i, v in enumerate((a, b), start=1):
+        if isinstance(v, tuple):
+            n.inputs[i].default_value = (*v, 1.0)
+        else:
+            nt.links.new(v, n.inputs[i])
+    return n.outputs[0]
+
+
+def _ramp(nt, val, stops, interp='EASE'):
+    """ColorRamp from [(pos, (r,g,b)), ...]; first two stops reuse the defaults."""
+    n = nt.nodes.new("ShaderNodeValToRGB")
+    cr = n.color_ramp
+    cr.interpolation = interp
+    cr.elements[0].position, cr.elements[0].color = stops[0][0], (*stops[0][1], 1.0)
+    cr.elements[1].position, cr.elements[1].color = stops[1][0], (*stops[1][1], 1.0)
+    for pos, col in stops[2:]:
+        cr.elements.new(pos).color = (*col, 1.0)
+    nt.links.new(val, n.inputs[0])
+    return n.outputs["Color"]
+
+
+def _scale_lattice(nt, ox, oy, half):
+    """
+    A staggered lattice of overlapping scale domes — the imbricated pattern real
+    snakes have, and (unlike a voronoi) exactly periodic along the body.
+
+    Returns (height, groove, cell_id). `height` is the dome, biased so each
+    scale's POSTERIOR edge sits proudest: scales shingle backwards, and that
+    asymmetry is the whole reason a snake's skin reads as directional at all.
+    `groove` is the darkening that survives downscaling to sprite size.
+    """
+    # Row index and the fraction within the row.
+    row = _mth(nt, 'MULTIPLY', oy, SCALE_ROWS / TEX_CELLS)
+    ry = _mth(nt, 'WRAP', row, 1.0, 0.0)
+    ridx = _mth(nt, 'FLOOR', row)
+    # Alternate rows shift half a cell across — that stagger is what makes the
+    # lattice read as scales rather than as a chequerboard.
+    parity = _mth(nt, 'WRAP', ridx, 2.0, 0.0)
+    col = _mth(nt, 'MULTIPLY', ox, SCALE_COLS / (2.0 * half))
+    col = _mth(nt, 'ADD', col, _mth(nt, 'MULTIPLY', parity, 0.5))
+    rx = _mth(nt, 'WRAP', col, 1.0, 0.0)
+
+    # Elliptical distance from the cell centre.
+    dx = _mth(nt, 'DIVIDE', _mth(nt, 'SUBTRACT', rx, 0.5), SCALE_AX)
+    dy = _mth(nt, 'DIVIDE', _mth(nt, 'SUBTRACT', ry, 0.5), SCALE_AY)
+    d = _mth(nt, 'SQRT', _mth(nt, 'ADD',
+                              _mth(nt, 'MULTIPLY', dx, dx),
+                              _mth(nt, 'MULTIPLY', dy, dy)))
+
+    # Flat-topped, not a bubble: the falloff is confined to the outer third of
+    # the cell so each scale has a plateau and a defined rim. A dome that eases
+    # all the way from the centre renders as bubble wrap.
+    dome = _range(nt, d, 0.98, 0.55, 0.0, 1.0)
+    # Posterior (-Y, i.e. low ry) edge raised: the free edge of each shingle.
+    shingle = _range(nt, ry, 0.0, 1.0, 1.0, 0.70, interp='LINEAR')
+    height = _mth(nt, 'MULTIPLY', dome, shingle)
+    groove = _range(nt, d, 0.74, 1.00, 1.0, 0.74)
+
+    # Per-scale tint. Cell ids are wrapped to the tile so the jitter is periodic
+    # too — an unwrapped hash would put a seam of odd-coloured scales at the
+    # tile boundary.
+    wn = nt.nodes.new("ShaderNodeTexWhiteNoise")
+    wn.noise_dimensions = '2D'
+    comb = nt.nodes.new("ShaderNodeCombineXYZ")
+    nt.links.new(_mth(nt, 'WRAP', ridx, SCALE_ROWS, 0.0), comb.inputs["X"])
+    nt.links.new(_mth(nt, 'FLOOR', col), comb.inputs["Y"])
+    nt.links.new(comb.outputs["Vector"], wn.inputs["Vector"])
+    return height, groove, wn.outputs["Value"]
+
+
+def _saddles(nt, oy, xn, hw_mid=0.21, hw_edge=0.115, reach=0.70, fade=0.47):
+    """
+    Dorsal saddle blotches: dark lens-shaped bands, widest over the spine and
+    pinching as they wrap down the flanks.
+
+    This is the single biggest cartoon-snake cue — a uniformly green tube has no
+    features for the eye to track, so it reads as a static noodle no matter how
+    well it is shaded. Bands give the motion something to move.
+
+    The blotch half-width tapers with a SMOOTHSTEP across the body, not
+    linearly: a linear taper makes the band's edge a straight diagonal in
+    (across, along) space, so the blotches render as hard mechanical chevrons
+    instead of the rounded lens shape an animal has.
+    """
+    sy = _mth(nt, 'MULTIPLY', oy, SADDLE_BANDS / TEX_CELLS)
+
+    # Per-blotch jitter. Identically sized blotches at a fixed pitch read as a
+    # machined hose, not an animal — the eye locks onto the regularity instantly
+    # at speed. Keying the jitter off the WRAPPED band index keeps the variation
+    # periodic over the tile, so the strip stays seamless while still looking
+    # hand-drawn.
+    bidx = _mth(nt, 'WRAP', _mth(nt, 'FLOOR', sy), float(SADDLE_BANDS), 0.0)
+    wn = nt.nodes.new("ShaderNodeTexWhiteNoise")
+    wn.noise_dimensions = '1D'
+    nt.links.new(bidx, wn.inputs["W"])
+    jit = wn.outputs["Value"]
+
+    centre = _range(nt, jit, 0.0, 1.0, 0.42, 0.58, interp='LINEAR')
+    sd = _mth(nt, 'ABSOLUTE', _mth(nt, 'SUBTRACT',
+                                   _mth(nt, 'WRAP', sy, 1.0, 0.0), centre))
+    grow = _range(nt, jit, 0.0, 1.0, 0.72, 1.0, interp='LINEAR')
+    # Held near-constant across the dorsal half before tapering. Tapering from
+    # the midline outward (the obvious reading of "widest over the spine")
+    # sharpens both ends of the blotch into points, and a row of dark points
+    # reads as holes punched through the body rather than as pigment on it.
+    hw = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.35, reach, hw_mid, hw_edge), grow)
+
+    inside = _range(nt, sd, _mth(nt, 'SUBTRACT', hw, 0.035), hw, 1.0, 0.0)
+    # Fade the blotch out before it reaches the silhouette. The flanks are
+    # already almost black from the form ramp, so a saddle that runs all the way
+    # to the edge simply merges into them and reads as a PINCH in the body
+    # rather than as a marking on it.
+    inside = _mth(nt, 'MULTIPLY', inside, _range(nt, xn, reach, fade, 0.0, 1.0))
+    # A thin bright keyline hugging each blotch. Without it the dark band just
+    # muddies into the flank shading; with it the marking reads as drawn. It has
+    # to stay genuinely THIN — widen it and it stops being a line and becomes a
+    # second, blown-out band competing with the blotch it is meant to define.
+    edge = _mth(nt, 'MULTIPLY',
+                _range(nt, sd, hw, _mth(nt, 'ADD', hw, 0.010), 0.0, 1.0),
+                _range(nt, sd, _mth(nt, 'ADD', hw, 0.022),
+                       _mth(nt, 'ADD', hw, 0.040), 1.0, 0.0))
+    return inside, edge
+
+
+def mat_body_strip(name="MAT_BodyStrip",
+                   rim=(0.008, 0.030, 0.028),
+                   flank=(0.022, 0.115, 0.075),
+                   mid=(0.068, 0.335, 0.170),
+                   dorsal=(0.195, 0.605, 0.272),
+                   spine=(0.345, 0.790, 0.380),
+                   saddle=(0.170, 0.270, 0.250),
+                   keyline=(0.520, 0.880, 0.450),
+                   gloss=(0.760, 0.980, 0.780),
+                   tint=0.055, bump=0.28, key_amt=0.10, saddle_kw=None):
+    """
+    The body tube's own material — deliberately NOT shared with the head.
+
+    The head is a rotating sprite whose shading has to survive being pitched up
+    to strike, which forces a shallow, forgiving normal ramp. The body tube
+    never tilts, so it can afford a ramp that sweeps the FULL width: near-black
+    at the silhouette through to a hot spine highlight. That full sweep is what
+    turns a flat green strip into something with a round cross-section.
+
+    On top of the form sit three pattern layers — imbricated scales, dorsal
+    saddles, and a wet gloss that tightens toward the spine.
+    """
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    half = 0.5 * (1.0 + TEX_BLEED)
+
+    tex = nt.nodes.new("ShaderNodeTexCoord")
+    obj = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tex.outputs["Object"], obj.inputs[0])
+    ox, oy = obj.outputs["X"], obj.outputs["Y"]
+
+    # --- form: the round-tube read ------------------------------------------
+    # Driven by ACROSS-BODY POSITION, not by the surface normal's Z. On a tube
+    # this shallow the normal is a badly behaved control: nz is still 0.68 at
+    # three-quarters of the way to the silhouette and only reaches the dark end
+    # of its range in the final 1% of the width. Ramp stops placed against it
+    # therefore bunch every dark tone into a hairline at the very edge and leave
+    # the whole visible body sitting in the two brightest stops — which is
+    # exactly what renders as a flat green noodle with a thin outline.
+    #
+    # Object X is linear across the frame, so a stop at 0.62 lands at 62% of the
+    # half-width, and the falloff curve becomes something authored rather than
+    # inherited from the cross-section.
+    xn = _mth(nt, 'DIVIDE', _mth(nt, 'ABSOLUTE', ox), half, clamp=True)
+    form = _ramp(nt, xn, [(0.00, spine), (0.26, dorsal), (0.58, mid),
+                          (0.82, flank), (1.00, rim)], interp='LINEAR')
+
+    # --- scales -------------------------------------------------------------
+    height, groove, cell_id = _scale_lattice(nt, ox, oy, half)
+    jitter = _range(nt, cell_id, 0.0, 1.0, 1.0 - tint, 1.0 + tint,
+                    interp='LINEAR')
+    col = _mix(nt, 1.0, form, jitter, blend='MULTIPLY')
+    col = _mix(nt, 1.0, col, groove, blend='MULTIPLY')
+
+    # --- saddles ------------------------------------------------------------
+    inside, edge = _saddles(nt, oy, xn, **(saddle_kw or {}))
+    col = _mix(nt, inside, col, _mix(nt, 1.0, col, saddle, blend='MULTIPLY'))
+    col = _mix(nt, _mth(nt, 'MULTIPLY', edge, key_amt), col, keyline)
+
+    # --- gloss ---------------------------------------------------------------
+    # Painted straight into the albedo rather than left to the BSDF's specular.
+    # A real specular highlight on a tube this glossy blows out to white across
+    # the entire dorsal band and takes the scale bump with it, turning the strip
+    # milky. Authoring the sheen as an explicit narrow band means its width and
+    # strength are exactly what they are set to, and it can never clip.
+    sheen = _mth(nt, 'MULTIPLY', _range(nt, xn, 0.30, 0.02, 0.0, 1.0), 0.34)
+    # Dulled over the blotches — pigment there is matte, and letting the sheen
+    # run at full strength across a saddle erases the marking it crosses.
+    sheen = _mth(nt, 'MULTIPLY', sheen,
+                 _range(nt, inside, 0.0, 1.0, 1.0, 0.40, interp='LINEAR'))
+    col = _mix(nt, sheen, col, gloss)
+    nt.links.new(col, bsdf.inputs["Base Color"])
+
+    # Matte enough that the light rig contributes shape, not glare.
+    nt.links.new(_range(nt, xn, 0.0, 1.0, 0.55, 0.88, interp='LINEAR'),
+                 bsdf.inputs["Roughness"])
+    if "Specular IOR Level" in bsdf.inputs:
+        bsdf.inputs["Specular IOR Level"].default_value = 0.20
+
+    bmp = nt.nodes.new("ShaderNodeBump")
+    bmp.inputs["Strength"].default_value = bump
+    bmp.inputs["Distance"].default_value = 0.022
+    nt.links.new(height, bmp.inputs["Height"])
+    nt.links.new(bmp.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
 def build_materials():
     return {
         # Head: a SHALLOW ramp (full dorsal by ~50 deg off vertical). The ramp
@@ -352,6 +626,9 @@ def build_materials():
         "scale_body": mat_scales("MAT_ScaleBody", (0.10, 0.47, 0.21),
                                  (0.020, 0.135, 0.075),
                                  flank_stop=0.52, dorsal_stop=0.93),
+        # The strip tube gets its own material — see mat_body_strip for why it
+        # can use a far steeper ramp than anything that has to rotate.
+        "body_strip": mat_body_strip(),
         "mouth": mat_basic("MAT_Mouth", (0.30, 0.045, 0.075), rough=0.45),
         "throat": mat_basic("MAT_Throat", (0.075, 0.010, 0.025), rough=0.7),
         "fang": mat_basic("MAT_Fang", (0.97, 0.96, 0.90), rough=0.20, spec=0.9),
@@ -518,7 +795,8 @@ BODY_P = 0.88   # rounder cross-section than the head — boxy beads don't chain
 # How much wider than its render frame the texture tube is drawn.
 TEX_BLEED = 0.015
 # Body length (in cells) covered by one tile of the body strip texture.
-TEX_CELLS = 2.0
+# Must match TEX_CELLS in src/render/Snake3DBody.tsx.
+TEX_CELLS = 3.0
 
 
 def build_body(M):
@@ -559,7 +837,7 @@ def build_body(M):
     tube = loft("SNK_BodyTube",
                 [(y, superellipse(r, r * 0.95, r * 0.55, p=1.0))
                  for y in (-3.0, -1.5, 0.0, 1.5, 3.0)],
-                M["scale_body"])
+                M["body_strip"])
     tube.location.x = 12.0
     return [seg, tail, tube]
 
@@ -780,6 +1058,55 @@ BODY_SPAN = 1.5
 GAPE_FRAMES = 6     # closed -> full strike gape
 FLICK_FRAMES = 4    # idle tongue flick, mouth shut
 
+# Strip texture size. Wider than it needs to be for the on-screen body width,
+# because the scale lattice is fine and the mesh stretches the strip across
+# ribbons that widen on the outside of every turn.
+STRIP_W = 256
+STRIP_H = int(STRIP_W * TEX_CELLS)
+
+
+def render_body_strip(outdir, name="body_tex.png"):
+    """
+    Render the tube edge-to-edge into the strip texture the game maps across
+    its body ribbon.
+
+    The strip gets its OWN lighting, and that is not a detail. The standing rig
+    rings the subject with four fill lights so the head stays readable however
+    the sprite is rotated — but those fills land squarely on the tube's flanks,
+    lifting exactly the pixels that are supposed to be darkest and flattening
+    the tube back into a strip. So the fills are muted here and a single broad
+    overhead key does the work, letting the material's own normal ramp carry
+    the round cross-section.
+    """
+    import os
+    os.makedirs(outdir, exist_ok=True)
+    sc = bpy.context.scene
+    tube = bpy.data.objects["SNK_BodyTube"]
+    lights = [o for o in bpy.data.objects if o.type == 'LIGHT']
+    saved = [(o, o.location.copy(), o.data.energy) for o in lights]
+    for o in lights:
+        o.location.x += tube.location.x
+        if o.name.startswith("RIM_"):
+            o.data.energy *= 0.22
+        elif o.name == "KEY":
+            o.data.energy *= 0.45
+            # Centred, or the specular runs down one side of the body and the
+            # snake looks lit from a fixed direction as it turns.
+            o.location.x = tube.location.x
+            o.location.y = 0.0
+    # ortho_scale spans the LARGER axis, so this frames TEX_CELLS vertically and
+    # exactly one cell horizontally.
+    aim_camera(tilt=0.0, ortho=TEX_CELLS, focus=(tube.location.x, 0.0, 0.0))
+    sc.render.resolution_x, sc.render.resolution_y = STRIP_W, STRIP_H
+    sc.render.film_transparent = False
+    sc.render.filepath = os.path.join(outdir, name)
+    bpy.ops.render.render(write_still=True)
+    sc.render.film_transparent = True
+    for o, loc, energy in saved:
+        o.location = loc
+        o.data.energy = energy
+    return name
+
 
 def export_sprites(outdir, res_head=320, res_body=256):
     """Render every sprite the game needs plus a manifest describing them."""
@@ -827,25 +1154,7 @@ def export_sprites(outdir, res_head=320, res_body=256):
     set_pose(arm, gape=0.0)
     # The bead and tail-cap meshes stay in the .blend as shape reference, but
     # the game draws the body as one textured ribbon, so they aren't exported.
-
-    # The body strip: a non-square frame cropped exactly to the tube's width, so
-    # u=0 and u=1 land on its two silhouette edges and the game can stretch it
-    # across a ribbon of any width.
-    tube = bpy.data.objects["SNK_BodyTube"]
-    tex_w, tex_h = 192, int(192 * TEX_CELLS)
-    lights = [o for o in bpy.data.objects if o.type == 'LIGHT']
-    for o in lights:
-        o.location.x += tube.location.x
-    # ortho_scale spans the LARGER axis, so this frames TEX_CELLS vertically and
-    # exactly one cell horizontally.
-    aim_camera(tilt=0.0, ortho=TEX_CELLS, focus=(tube.location.x, 0.0, 0.0))
-    sc.render.resolution_x, sc.render.resolution_y = tex_w, tex_h
-    sc.render.film_transparent = False
-    sc.render.filepath = os.path.join(outdir, "body_tex.png")
-    bpy.ops.render.render(write_still=True)
-    sc.render.film_transparent = True
-    for o in lights:
-        o.location.x -= tube.location.x
+    render_body_strip(outdir)
     sc.render.resolution_x = sc.render.resolution_y = res_body
 
     manifest = {
@@ -858,8 +1167,12 @@ def export_sprites(outdir, res_head=320, res_body=256):
                  "gape": frames["gape"], "flick": frames["flick"]},
         "body": {"strip": {"image": "body_tex.png", "cells_long": TEX_CELLS,
                            "u_spans": "the full tube width, edge to edge",
-                           "tile": "mirror vertically — seamless without a "
-                                   "periodic pattern"}},
+                           "tile": "REPEAT vertically — every pattern layer is "
+                                   "periodic over the tile, so it tiles without "
+                                   "mirroring. Do not mirror it: that flips the "
+                                   "scales' overlap direction on alternate "
+                                   "tiles, pointing the skin backwards down "
+                                   "half the snake."}},
     }
     with open(os.path.join(outdir, "snake.json"), "w") as fh:
         json.dump(manifest, fh, indent=2)

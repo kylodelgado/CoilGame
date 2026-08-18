@@ -1,4 +1,34 @@
 /**
+ * Menu/chrome design tokens carried by every skin, so the whole app UI —
+ * not just the board — restyles when the skin changes. Values must be
+ * self-consistent: on a LIGHT skin (isLight true, e.g. monoLcd's pale LCD
+ * green) text tokens must be dark, and vice versa, so nothing is ever
+ * light-on-light or dark-on-dark. Consumed via src/ui/theme's useTheme().
+ */
+export interface SkinUi {
+  /** True when surfaces are light and text must be dark (e.g. monoLcd). */
+  isLight: boolean;
+  /** Base screen background for menus and overlays. */
+  surface: string;
+  /** Raised panel/card background, one layer above surface. */
+  surfaceRaised: string;
+  /** 1px luminous panel/divider border color. */
+  border: string;
+  /** Primary text — must contrast strongly against surface/surfaceRaised. */
+  textPrimary: string;
+  /** Secondary/caption text — readable but recessive. */
+  textSecondary: string;
+  /** The skin's glowing brand accent (buttons, selection, highlights). */
+  accent: string;
+  /** Text/icon color that reads on top of an accent-filled control. */
+  onAccent: string;
+  /** Destructive/danger color (reset, delete, hot end of gauges). */
+  danger: string;
+  /** Modal scrim (rgba — the one token allowed an alpha channel). */
+  scrim: string;
+}
+
+/**
  * Visual design tokens for the board and its actors. Renderers read every color
  * and shape decision from the active Skin (via useSkin) — no hard-coded colors —
  * so new skins drop in for Phase 2 with zero rendering changes. (FR-A4/A5)
@@ -49,4 +79,6 @@ export interface Skin {
   bonusShape: 'square' | 'circle';
   /** Dynamic-walls obstacle color — reads as a hazard, distinct from the snake. */
   obstacleColor: string;
+  /** Menu/chrome tokens: every skin styles the whole app, not just the board. */
+  ui: SkinUi;
 }

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { ModeId, WallBehavior } from '../engine/types';
 import type { AuthPort } from '../services/AuthPort';
@@ -12,7 +20,13 @@ import { appAuth } from '../services/authInstance';
 import { appLeaderboard } from '../services/leaderboardInstance';
 import { useAuthStore } from '../state/useAuthStore';
 import { useSettingsStore } from '../state/useSettingsStore';
-import { useSkin } from '../skins/SkinProvider';
+import {
+  Chip,
+  IconButton,
+  MEDALS,
+  ScreenShell,
+  useTheme,
+} from '../ui';
 
 const TOP_N = 20;
 
@@ -33,18 +47,20 @@ interface LeaderboardScreenProps {
 }
 
 /**
- * Leaderboard: top scores for a selected mode×wall board. Reads are offline-safe
- * (resolve []/null), so the screen renders loading / empty / list states without
- * ever crashing. The current user's row is highlighted, and their best is pinned
- * below when outside the top N. Anonymous/local play stays first-class: the
- * public board always shows, with a gentle sign-in prompt when signed out. (Chunk K)
+ * Leaderboard: top scores for a selected mode×wall board, as a FlatList with
+ * pull-to-refresh. Reads are offline-safe (resolve []/null), so the screen
+ * renders loading / empty / list states without ever crashing. Top-3 rows get
+ * medal accents; the current user's row is highlighted (border + label, never
+ * color alone), and their best is pinned below when outside the top N.
+ * Anonymous/local play stays first-class: the public board always shows, with
+ * a gentle sign-in prompt when signed out. (Chunk K)
  */
 export function LeaderboardScreen({
   leaderboard = appLeaderboard,
   auth = appAuth,
 }: LeaderboardScreenProps = {}) {
   const router = useRouter();
-  const skin = useSkin();
+  const { ui, spacing, radius, type } = useTheme();
 
   const user = useAuthStore((s) => s.user);
   useEffect(() => useAuthStore.getState().hydrate(auth), [auth]);
@@ -59,25 +75,37 @@ export function LeaderboardScreen({
   // entries === null means "loading"; [] means "no scores yet".
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
   const [userBest, setUserBest] = useState<LeaderboardEntry | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const reqRef = useRef(0);
 
   const uid = user?.uid ?? null;
-  const load = useCallback(async () => {
-    const req = ++reqRef.current;
-    setEntries(null);
-    const [top, best] = await Promise.all([
-      leaderboard.getTopScores(board, TOP_N),
-      uid ? leaderboard.getUserBest(board, uid) : Promise.resolve(null),
-    ]);
-    if (req !== reqRef.current) {
-      return; // a newer board/refresh superseded this read
-    }
-    setEntries(top);
-    setUserBest(best);
-  }, [leaderboard, board, uid]);
+  const load = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      const req = ++reqRef.current;
+      if (!options.silent) {
+        setEntries(null); // full reload: show the loading state
+      }
+      const [top, best] = await Promise.all([
+        leaderboard.getTopScores(board, TOP_N),
+        uid ? leaderboard.getUserBest(board, uid) : Promise.resolve(null),
+      ]);
+      if (req !== reqRef.current) {
+        return; // a newer board/refresh superseded this read
+      }
+      setEntries(top);
+      setUserBest(best);
+    },
+    [leaderboard, board, uid],
+  );
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Pull-to-refresh keeps the list on screen while re-querying.
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void load({ silent: true }).finally(() => setRefreshing(false));
   }, [load]);
 
   const loading = entries === null;
@@ -88,109 +116,145 @@ export function LeaderboardScreen({
 
   const renderRow = (e: LeaderboardEntry, pinned: boolean) => {
     const isSelf = e.uid === uid;
+    const medal = !pinned && e.rank >= 1 && e.rank <= 3 ? MEDALS[e.rank - 1] : null;
     return (
       <View
         key={pinned ? 'pinned' : e.uid}
         testID={pinned ? 'lb-pinned' : `lb-entry-${e.uid}`}
+        accessible
+        accessibilityLabel={`Rank ${e.rank}, ${e.displayName}, ${e.score} points${
+          isSelf ? ', you' : ''
+        }`}
         accessibilityState={{ selected: isSelf }}
         style={[
           styles.row,
-          isSelf && { borderColor: skin.snakeHead, borderWidth: 1 },
+          {
+            backgroundColor: ui.surfaceRaised,
+            borderRadius: radius.md,
+            borderColor: isSelf ? ui.accent : medal ?? ui.border,
+            borderWidth: isSelf || medal ? 1.5 : 1,
+          },
         ]}
       >
-        <Text style={[styles.rank, { color: skin.snakeBody }]}>{e.rank}</Text>
-        <Text style={[styles.name, { color: isSelf ? skin.snakeHead : '#ddd' }]}>
+        <View style={styles.rankSlot}>
+          {medal !== null ? (
+            <Ionicons name="medal" size={18} color={medal} />
+          ) : (
+            <Text style={[styles.rank, { color: ui.textSecondary }]}>
+              {e.rank}
+            </Text>
+          )}
+        </View>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.name,
+            { color: isSelf ? ui.accent : ui.textPrimary },
+          ]}
+        >
           {e.displayName}
+          {isSelf ? '  (you)' : ''}
         </Text>
-        <Text style={[styles.score, { color: skin.snakeHead }]}>{e.score}</Text>
+        <Text style={[styles.score, { color: medal ?? ui.textPrimary }]}>
+          {e.score}
+        </Text>
       </View>
     );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: skin.background }]}>
+    <ScreenShell world contentStyle={{ gap: spacing.md }}>
       <View style={styles.header}>
-        <Pressable
+        <IconButton
           testID="back-button"
-          accessibilityRole="button"
+          icon="chevron-back"
           accessibilityLabel="Back"
           onPress={() => router.back()}
+        />
+        <Text
+          accessibilityRole="header"
+          style={[type.title, { color: ui.textPrimary }]}
         >
-          <Text style={[styles.back, { color: skin.snakeBody }]}>‹ Back</Text>
-        </Pressable>
-        <Text style={[styles.title, { color: skin.snakeHead }]}>Leaderboard</Text>
-        <Pressable
+          Leaderboard
+        </Text>
+        <IconButton
           testID="lb-refresh"
-          accessibilityRole="button"
+          icon="refresh"
           accessibilityLabel="Refresh"
           onPress={() => void load()}
-        >
-          <Text style={[styles.refresh, { color: skin.snakeBody }]}>↻</Text>
-        </Pressable>
+        />
       </View>
 
-      <View style={styles.selectors}>
-        <View style={styles.selectorRow}>
-          {MODES.map(([id, label]) => {
-            const active = board.modeId === id;
-            return (
-              <Pressable
-                key={id}
-                testID={`lb-mode-${id}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => setBoard((b) => ({ ...b, modeId: id }))}
-                style={[styles.chip, active && { borderColor: skin.snakeHead }]}
-              >
-                <Text style={[styles.chipLabel, active && { color: skin.snakeHead }]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
+      <View style={{ gap: spacing.sm }}>
+        <View style={[styles.selectorRow, { gap: spacing.sm }]}>
+          {MODES.map(([id, label]) => (
+            <Chip
+              key={id}
+              testID={`lb-mode-${id}`}
+              label={label}
+              accessibilityLabel={`${label} mode board`}
+              selected={board.modeId === id}
+              onPress={() => setBoard((b) => ({ ...b, modeId: id }))}
+            />
+          ))}
         </View>
-        <View style={styles.selectorRow}>
-          {WALLS.map(([w, label]) => {
-            const active = board.wall === w;
-            return (
-              <Pressable
-                key={w}
-                testID={`lb-wall-${w}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => setBoard((b) => ({ ...b, wall: w }))}
-                style={[styles.chip, active && { borderColor: skin.snakeHead }]}
-              >
-                <Text style={[styles.chipLabel, active && { color: skin.snakeHead }]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={[styles.selectorRow, { gap: spacing.sm }]}>
+          {WALLS.map(([w, label]) => (
+            <Chip
+              key={w}
+              testID={`lb-wall-${w}`}
+              label={label}
+              accessibilityLabel={`${label} walls board`}
+              selected={board.wall === w}
+              onPress={() => setBoard((b) => ({ ...b, wall: w }))}
+            />
+          ))}
         </View>
       </View>
 
       {loading && (
-        <Text testID="lb-loading" style={styles.statusText}>
+        <Text
+          testID="lb-loading"
+          style={[type.body, styles.statusText, { color: ui.textSecondary }]}
+        >
           Loading…
         </Text>
       )}
 
       {isEmpty && (
-        <Text testID="lb-empty" style={styles.statusText}>
+        <Text
+          testID="lb-empty"
+          style={[type.body, styles.statusText, { color: ui.textSecondary }]}
+        >
           No scores yet — be the first!
         </Text>
       )}
 
       {!loading && !isEmpty && (
-        <ScrollView testID="lb-list" contentContainerStyle={styles.list}>
-          {entries!.map((e) => renderRow(e, false))}
-        </ScrollView>
+        <FlatList
+          testID="lb-list"
+          data={entries ?? []}
+          keyExtractor={(e) => e.uid}
+          renderItem={({ item }) => renderRow(item, false)}
+          contentContainerStyle={[styles.list, { gap: spacing.sm }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={ui.accent}
+              colors={[ui.accent]}
+              progressBackgroundColor={ui.surfaceRaised}
+            />
+          }
+        />
       )}
 
       {showPinned && (
         <View style={styles.pinnedWrap}>
-          <Text style={styles.pinnedLabel}>Your best</Text>
+          <Text style={[type.label, { color: ui.textSecondary }]}>
+            Your best
+          </Text>
           {renderRow(userBest!, true)}
         </View>
       )}
@@ -199,64 +263,63 @@ export function LeaderboardScreen({
         <Pressable
           testID="lb-signin-prompt"
           accessibilityRole="button"
+          accessibilityLabel="Sign in to compete on the leaderboard"
           onPress={() => router.push('/account')}
-          style={styles.signinPrompt}
+          style={[
+            styles.signinPrompt,
+            {
+              borderColor: ui.border,
+              borderRadius: radius.md,
+              backgroundColor: ui.surfaceRaised,
+            },
+          ]}
         >
-          <Text style={[styles.signinText, { color: skin.snakeHead }]}>
+          <Text style={[styles.signinText, { color: ui.accent }]}>
             Sign in to compete on the leaderboard
           </Text>
         </Pressable>
       )}
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 64, paddingHorizontal: 20, gap: 12 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  back: { fontSize: 18 },
-  title: { fontSize: 24, fontWeight: '800' },
-  refresh: { fontSize: 24 },
-  selectors: { gap: 8 },
-  selectorRow: { flexDirection: 'row', gap: 8 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: '#141414',
-  },
-  chipLabel: { color: '#aaa', fontSize: 14, fontWeight: '600' },
-  statusText: { color: '#888', fontSize: 16, textAlign: 'center', marginTop: 32 },
-  list: { gap: 6, paddingVertical: 8 },
+  selectorRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  statusText: { textAlign: 'center', marginTop: 32 },
+  list: { paddingVertical: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: '#161616',
-    borderColor: 'transparent',
     gap: 12,
   },
-  rank: { width: 28, fontSize: 15, fontWeight: '700' },
+  rankSlot: { width: 28, alignItems: 'center' },
+  rank: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
   name: { flex: 1, fontSize: 16, fontWeight: '600' },
-  score: { fontSize: 16, fontWeight: '800' },
+  score: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
   pinnedWrap: { gap: 4 },
-  pinnedLabel: { color: '#888', fontSize: 12, letterSpacing: 1, marginLeft: 4 },
   signinPrompt: {
     marginTop: 'auto',
-    marginBottom: 24,
     paddingVertical: 14,
-    borderRadius: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#333',
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  signinText: { fontSize: 15, fontWeight: '600' },
+  signinText: { fontSize: 15, fontWeight: '700' },
 });

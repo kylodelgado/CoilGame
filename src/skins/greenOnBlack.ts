@@ -29,4 +29,18 @@ export const greenOnBlack: Skin = {
   bonusColor: '#FFD300', // bright golden yellow, pops against the green palette
   bonusShape: 'circle',
   obstacleColor: '#555555', // neutral grey wall, clearly not snake or food
+  // "Neon Terrarium" chrome: deep near-black layered panels with moss-tinted
+  // borders and the snake's bioluminescent green as the glowing accent.
+  ui: {
+    isLight: false,
+    surface: '#07090B',
+    surfaceRaised: '#0D1410',
+    border: '#1C2B20',
+    textPrimary: '#E9F5EB',
+    textSecondary: '#8FA895',
+    accent: '#7CFC00',
+    onAccent: '#04120A',
+    danger: '#FF5A5A',
+    scrim: 'rgba(2, 6, 4, 0.74)',
+  },
 };

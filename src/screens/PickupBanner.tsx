@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 import type { PowerupKind } from '../engine/types';
 import { POWERUP_META } from '../render/powerupMeta';
+import { useTheme } from '../ui';
 
 interface PickupBannerProps {
   /** The kind grabbed on the latest tick, or null. Each non-null value flashes. */
@@ -18,6 +19,7 @@ const SHOW_MS = 1600;
  * a local fade. (Phase 2 powerups)
  */
 export function PickupBanner({ pickup }: PickupBannerProps) {
+  const { ui } = useTheme();
   const [shown, setShown] = useState<PowerupKind | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,10 +64,16 @@ export function PickupBanner({ pickup }: PickupBannerProps) {
     <Animated.View
       testID="pickup-banner"
       pointerEvents="none"
-      style={[styles.banner, { borderColor: meta.color, opacity }]}
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.banner,
+        // Raised themed panel (not fixed black) so the copy stays readable on
+        // light skins like Pocket LCD too.
+        { borderColor: meta.color, backgroundColor: ui.surfaceRaised, opacity },
+      ]}
     >
       <Text style={[styles.label, { color: meta.color }]}>{meta.label}</Text>
-      <Text style={styles.blurb}>{meta.blurb}</Text>
+      <Text style={[styles.blurb, { color: ui.textPrimary }]}>{meta.blurb}</Text>
     </Animated.View>
   );
 }
@@ -81,8 +89,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 2,
-    backgroundColor: 'rgba(0,0,0,0.72)',
   },
   label: { fontSize: 22, fontWeight: '900', letterSpacing: 1 },
-  blurb: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  blurb: { fontSize: 13, fontWeight: '600' },
 });

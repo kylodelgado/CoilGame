@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
+  Animated,
   BackHandler,
   Pressable,
   StyleSheet,
@@ -40,16 +42,20 @@ import { DpadInput } from '../input/DpadInput';
 import { AnalogInput } from '../input/AnalogInput';
 import { createMathRandom, type RandomPort } from '../services/RandomPort';
 import { createExpoHaptics, type HapticsPort } from '../services/HapticsPort';
-import { createSilentSound, type SoundPort } from '../services/SoundPort';
+import type { SoundPort } from '../services/SoundPort';
+import { appSound } from '../services/soundInstance';
 import {
   createScoreSubmitter,
   type ScoreSubmitter,
 } from '../services/submitScoreOnTerminal';
-import { createInMemoryAuth } from '../services/AuthPort';
-import { createInMemoryLeaderboard } from '../services/LeaderboardPort';
+import { appAuth } from '../services/authInstance';
+import { appLeaderboard } from '../services/leaderboardInstance';
 import { useSettingsStore } from '../state/useSettingsStore';
 import { useScoresStore } from '../state/useScoresStore';
+import { useEntitlementsStore } from '../state/useEntitlementsStore';
+import { useInterstitialGate, useRevive } from '../monetization';
 import { useSkin } from '../skins/SkinProvider';
+import { GlowButton, IconButton, useReducedMotion, useTheme } from '../ui';
 import { PauseOverlay } from './PauseOverlay';
 import { ActiveEffectsHud } from './ActiveEffectsHud';
 import { PickupBanner } from './PickupBanner';
@@ -123,6 +129,8 @@ export function GameScreen(props: GameScreenProps = {}) {
   const routerRef = useRef(router);
   routerRef.current = router;
   const skin = useSkin();
+  const { ui, type } = useTheme();
+  const reducedMotion = useReducedMotion();
   const params = useLocalSearchParams<{
     presetId?: string;
     wall?: string;
@@ -157,16 +165,14 @@ export function GameScreen(props: GameScreenProps = {}) {
   const mode = props.mode ?? MODES[modeId];
   const rng = useMemo(() => props.rng ?? createMathRandom(), [props.rng]);
   const haptics = useMemo(() => props.haptics ?? createExpoHaptics(), [props.haptics]);
-  const sound = useMemo(() => props.sound ?? createSilentSound(), [props.sound]);
-  // Local-only by default (in-memory auth has no user => submit no-ops). The
-  // real Firebase-backed submitter is injected once auth is wired (step 45+).
+  // The app-wide sound singleton (real SFX once the audio pipeline lands).
+  const sound = useMemo(() => props.sound ?? appSound, [props.sound]);
+  // Submit through the APP singletons so the shared identity that signed in on
+  // the Account screen is the one whose scores land on the leaderboard.
   const submitter = useMemo(
     () =>
       props.submitter ??
-      createScoreSubmitter({
-        auth: createInMemoryAuth(),
-        leaderboard: createInMemoryLeaderboard(),
-      }),
+      createScoreSubmitter({ auth: appAuth, leaderboard: appLeaderboard }),
     [props.submitter],
   );
 
@@ -208,11 +214,19 @@ export function GameScreen(props: GameScreenProps = {}) {
     tickMs: config.baseTickMs,
   }));
 
-  const onTerminal = useCallback(
+  // Revive flow (monetization): one offer per run; the gate lives in a ref so
+  // onTerminal stays referentially stable for the controller memo.
+  const [lossOffer, setLossOffer] = useState<TerminalPayload | null>(null);
+  const { maybeShowAfterGameOver } = useInterstitialGate();
+  const premium = useEntitlementsStore((s) => s.premium);
+  const canReviveRef = useRef(true);
+
+  const navigateTerminal = useCallback(
     (payload: TerminalPayload) => {
       const { state, score, isNewBest, foodEaten, length, elapsedMs } = payload;
+      const lost = state.status !== 'WON';
       routerRef.current.replace({
-        pathname: state.status === 'WON' ? '/win' : '/loss',
+        pathname: lost ? '/loss' : '/win',
         params: {
           score: String(score),
           isNewBest: isNewBest ? '1' : '0',
@@ -228,9 +242,27 @@ export function GameScreen(props: GameScreenProps = {}) {
       // Fire-and-forget leaderboard submission AFTER local recordRun (done in
       // the controller) and the terminal navigation; never gates the UI path.
       submitter.submit({ modeId, wall }, score);
+
+      // Interstitial cadence: losses only, every 3rd, 90s-capped, never for
+      // premium — all encapsulated in the gate. Fired after navigation.
+      if (lost) {
+        void maybeShowAfterGameOver();
+      }
     },
-    [presetId, wall, modeId, submitter],
+    [presetId, wall, modeId, submitter, maybeShowAfterGameOver],
   );
+  const navigateTerminalRef = useRef(navigateTerminal);
+  navigateTerminalRef.current = navigateTerminal;
+
+  const onTerminal = useCallback((payload: TerminalPayload) => {
+    // A loss with the run's revive still available pauses the exit: offer it.
+    // Wins, and losses after the revive is spent, go straight out.
+    if (payload.state.status === 'LOST' && canReviveRef.current) {
+      setLossOffer(payload);
+      return;
+    }
+    navigateTerminalRef.current(payload);
+  }, []);
 
   // The controller owns authoritative state; recreate only when config changes.
   const controller = useMemo(
@@ -265,6 +297,133 @@ export function GameScreen(props: GameScreenProps = {}) {
     seconds: COUNTDOWN_SECONDS,
     onComplete: controller.setRunning,
   });
+
+  // Bumped on every in-place restart so the snake renderer snaps (no glide
+  // streak from the old body) — threaded into DynamicLayer as resetKey.
+  const [runKey, setRunKey] = useState(0);
+
+  // One revive per run (keyed by runKey, so Restart re-arms it). Premium
+  // revives instantly; free players watch a rewarded ad (mock-earns today).
+  const { canRevive, offerRevive } = useRevive(runKey);
+  canReviveRef.current = canRevive;
+  const [reviving, setReviving] = useState(false);
+
+  // Read via ref so decline stays stable AND the navigation side effect runs
+  // outside the state updater (updaters must stay pure).
+  const lossOfferRef = useRef<TerminalPayload | null>(null);
+  lossOfferRef.current = lossOffer;
+  const declineRevive = useCallback(() => {
+    const payload = lossOfferRef.current;
+    if (payload === null) {
+      return;
+    }
+    setLossOffer(null);
+    navigateTerminalRef.current(payload);
+  }, []);
+
+  const tryRevive = useCallback(async () => {
+    if (reviving) {
+      return;
+    }
+    setReviving(true);
+    try {
+      const earned = await offerRevive();
+      if (!earned) {
+        // Ad dismissed/unavailable — the offer survives; player may retry.
+        return;
+      }
+      if (controller.revive()) {
+        setRunKey((k) => k + 1); // snap the renderer to the shortened body
+        setLossOffer(null);
+      } else {
+        // Engine says no safe cell (near-full grid) — proceed to the loss.
+        declineRevive();
+      }
+    } finally {
+      setReviving(false);
+    }
+  }, [reviving, offerRevive, declineRevive, controller]);
+
+  // The offer self-expires so an away player isn't stuck on the overlay.
+  useEffect(() => {
+    if (lossOffer === null) {
+      return undefined;
+    }
+    const timer = setTimeout(declineRevive, 9000);
+    return () => clearTimeout(timer);
+  }, [lossOffer, declineRevive]);
+
+  // Screen-reader narration, guarded: a missing platform API must never crash
+  // the run. Announces each countdown number, then "go".
+  const announce = useCallback((message: string) => {
+    try {
+      AccessibilityInfo.announceForAccessibility(message);
+    } catch {
+      // No announcement support here — the visual countdown still shows.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (projection.status === 'COUNTDOWN' && remaining > 0) {
+      announce(String(remaining));
+      if (useSettingsStore.getState().soundEnabled) {
+        sound.play('COUNTDOWN_TICK');
+      }
+    }
+  }, [projection.status, remaining, announce, sound]);
+
+  // Flash "GO" for a beat as COUNTDOWN flips into RUNNING.
+  const [showGo, setShowGo] = useState(false);
+  const prevStatusRef = useRef(projection.status);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = projection.status;
+    if (prev === 'COUNTDOWN' && projection.status === 'RUNNING') {
+      announce('go');
+      if (useSettingsStore.getState().soundEnabled) {
+        sound.play('GO');
+      }
+      setShowGo(true);
+      const timer = setTimeout(() => setShowGo(false), 650);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [projection.status, announce, sound]);
+
+  // Gentle pulse on the tap-to-start hint (static under Reduce Motion).
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reducedMotion || projection.status !== 'TAP_TO_START') {
+      pulse.setValue(1);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, reducedMotion, projection.status]);
+
+  // HUD chip: the current board's best, live from the scores store.
+  const bests = useScoresStore((s) => s.bests);
+  const boardBest = bests[`${modeId}:${wall}`] ?? 0;
+  const modeName =
+    modeId === 'GPS'
+      ? 'GPS'
+      : modeId === 'DYNAMIC_WALLS'
+        ? 'Dynamic Walls'
+        : 'Classic';
 
   // Android hardware back: never silently forfeit — pause and show the overlay
   // instead of popping the stack. (EH-11)
@@ -360,23 +519,48 @@ export function GameScreen(props: GameScreenProps = {}) {
     <View
       style={[
         styles.container,
-        { backgroundColor: skin.background, paddingTop: insets.top },
+        {
+          backgroundColor: skin.background,
+          paddingTop: insets.top,
+          // computeGrid subtracts BOTH insets; when the D-pad chrome is up it
+          // pads the bottom inset itself, otherwise the container must, so the
+          // board view matches the grid math exactly. (layout consistency)
+          paddingBottom: controlScheme === 'DPAD' ? 0 : insets.bottom,
+        },
       ]}
     >
       <View style={[styles.hud, { height: SCORE_BAR_HEIGHT }]}>
-        <Text testID="score-hud" style={[styles.score, { color: skin.snakeHead }]}>
-          {score}
-        </Text>
+        <View style={styles.scoreBlock}>
+          <Text
+            testID="score-hud"
+            accessibilityLabel={`Score ${score}`}
+            style={[type.score, { color: ui.textPrimary }]}
+          >
+            {score}
+          </Text>
+          <View
+            testID="hud-mode-chip"
+            style={[
+              styles.modeChip,
+              { borderColor: ui.border, backgroundColor: ui.surfaceRaised },
+            ]}
+          >
+            <Text
+              numberOfLines={1}
+              style={[styles.modeChipText, { color: ui.textSecondary }]}
+            >
+              {modeName} · Best {boardBest}
+            </Text>
+          </View>
+        </View>
         <SpeedGauge fraction={speedFraction} coolColor={skin.snakeHead} />
-        <Pressable
+        <IconButton
           testID="pause-button"
-          accessibilityRole="button"
+          icon="pause"
           accessibilityLabel="Pause"
+          color={ui.textPrimary}
           onPress={() => controller.pause()}
-          style={styles.pauseButton}
-        >
-          <Text style={styles.pauseGlyph}>❚❚</Text>
-        </Pressable>
+        />
       </View>
 
       <View testID="game-board" style={styles.board}>
@@ -386,6 +570,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               viewport={viewport}
               cellSize={world.cellSize}
               gridOrigin={gridOrigin}
+              wall={wall}
             />
             <WorldDynamicLayer
               viewport={viewport}
@@ -406,7 +591,7 @@ export function GameScreen(props: GameScreenProps = {}) {
           </>
         ) : (
           <>
-            <Board gridSpec={grid} />
+            <Board gridSpec={grid} wall={wall} />
             <DynamicLayer
               gridSpec={grid}
               snake={snake}
@@ -418,6 +603,7 @@ export function GameScreen(props: GameScreenProps = {}) {
               bustedCells={bustedCells}
               pickupBanner={pickupBanner}
               glow={speedFraction}
+              resetKey={runKey}
             />
           </>
         )}
@@ -457,22 +643,60 @@ export function GameScreen(props: GameScreenProps = {}) {
         {status === 'TAP_TO_START' && (
           <Pressable
             testID="tap-to-start-overlay"
-            style={styles.overlay}
+            accessibilityRole="button"
+            accessibilityLabel={`Tap to start. ${modeName} mode`}
+            style={[styles.overlay, { backgroundColor: ui.scrim }]}
             onPress={() => controller.tapToStart()}
           >
-            <Text style={[styles.overlayTitle, { color: skin.snakeHead }]}>
-              Tap to start
+            <Text
+              style={[
+                styles.overlayTitle,
+                styles.glowText,
+                { color: ui.accent, textShadowColor: ui.accent },
+              ]}
+            >
+              TAP TO START
             </Text>
+            <Animated.Text
+              style={[
+                styles.overlayHint,
+                { color: ui.textSecondary, opacity: pulse },
+              ]}
+            >
+              {modeName}
+            </Animated.Text>
           </Pressable>
         )}
 
         {status === 'COUNTDOWN' && (
-          <View testID="countdown-overlay" style={styles.overlay} pointerEvents="none">
+          <View
+            testID="countdown-overlay"
+            style={[styles.overlay, { backgroundColor: ui.scrim }]}
+            pointerEvents="none"
+          >
             <Text
               testID="countdown-number"
-              style={[styles.countdown, { color: skin.snakeHead }]}
+              style={[
+                styles.countdown,
+                styles.glowText,
+                { color: ui.accent, textShadowColor: ui.accent },
+              ]}
             >
               {remaining}
+            </Text>
+          </View>
+        )}
+
+        {showGo && (
+          <View testID="go-overlay" style={styles.overlay} pointerEvents="none">
+            <Text
+              style={[
+                styles.countdown,
+                styles.glowText,
+                { color: ui.accent, textShadowColor: ui.accent },
+              ]}
+            >
+              GO
             </Text>
           </View>
         )}
@@ -480,8 +704,78 @@ export function GameScreen(props: GameScreenProps = {}) {
         {status === 'PAUSED' && (
           <PauseOverlay
             controller={controller}
+            onRestart={() => {
+              setRunKey((k) => k + 1); // snap the renderer to the fresh body
+              controller.restart();
+            }}
             onQuitToHome={() => routerRef.current.replace('/')}
           />
+        )}
+
+        {lossOffer !== null && (
+          <View
+            testID="revive-overlay"
+            accessibilityViewIsModal
+            style={[styles.overlay, { backgroundColor: ui.scrim }]}
+          >
+            <View
+              style={[
+                styles.revivePanel,
+                {
+                  backgroundColor: ui.surfaceRaised,
+                  borderColor: ui.border,
+                },
+              ]}
+            >
+              <Text
+                accessibilityRole="header"
+                style={[
+                  styles.overlayTitle,
+                  styles.glowText,
+                  // Title-only display-font adoption (style edit, no logic).
+                  type.display.fontFamily !== undefined && {
+                    fontFamily: type.display.fontFamily,
+                    fontWeight: '400' as const,
+                  },
+                  {
+                    color: ui.danger,
+                    textAlign: 'center',
+                    textShadowColor: ui.danger,
+                  },
+                ]}
+              >
+                SNAKE DOWN
+              </Text>
+              <Text style={[styles.reviveScore, { color: ui.textPrimary }]}>
+                Score {lossOffer.score}
+              </Text>
+              <Text style={[styles.reviveHint, { color: ui.textSecondary }]}>
+                {premium
+                  ? 'Coil Premium: revive instantly, once per run.'
+                  : 'Watch a short ad to keep this run alive — once per run.'}
+              </Text>
+              <GlowButton
+                testID="revive-accept"
+                label={
+                  reviving
+                    ? 'Reviving…'
+                    : premium
+                      ? 'Revive'
+                      : 'Watch ad & revive'
+                }
+                variant="primary"
+                disabled={reviving}
+                onPress={() => void tryRevive()}
+              />
+              <GlowButton
+                testID="revive-decline"
+                label="No thanks"
+                variant="secondary"
+                disabled={reviving}
+                onPress={declineRevive}
+              />
+            </View>
+          </View>
         )}
       </View>
 
@@ -505,10 +799,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
+    gap: 12,
   },
-  score: { fontSize: 28, fontWeight: '800' },
-  pauseButton: { padding: 8 },
-  pauseGlyph: { color: '#fff', fontSize: 20 },
+  scoreBlock: { gap: 2, flexShrink: 1 },
+  modeChip: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  modeChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
+  },
   board: { flex: 1 },
   // Floats the active-effect chips over the top of the board so showing/hiding
   // them never changes the board's height (which would resize the grid).
@@ -532,8 +838,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  overlayTitle: { fontSize: 32, fontWeight: '700' },
-  countdown: { fontSize: 96, fontWeight: '800' },
+  overlayTitle: { fontSize: 30, fontWeight: '900', letterSpacing: 4 },
+  overlayHint: { fontSize: 16, fontWeight: '700', letterSpacing: 2 },
+  revivePanel: {
+    alignItems: 'stretch',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    marginHorizontal: 32,
+    padding: 24,
+  },
+  reviveScore: {
+    fontSize: 22,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  reviveHint: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  countdown: {
+    fontSize: 104,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  glowText: {
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+  },
 });

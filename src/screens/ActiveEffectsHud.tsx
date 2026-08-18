@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { ActiveEffect } from '../engine/types';
 import { POWERUP_META } from '../render/powerupMeta';
+import { useTheme } from '../ui';
 
 interface ActiveEffectsHudProps {
   effects: ActiveEffect[];
@@ -14,6 +15,7 @@ interface ActiveEffectsHudProps {
  * (Phase 2 powerups)
  */
 export function ActiveEffectsHud({ effects }: ActiveEffectsHudProps) {
+  const { ui } = useTheme();
   if (effects.length === 0) {
     return null;
   }
@@ -29,13 +31,18 @@ export function ActiveEffectsHud({ effects }: ActiveEffectsHudProps) {
           <View
             key={e.kind}
             testID={`effect-${e.kind}`}
-            style={[styles.chip, { borderColor: meta.color }]}
+            accessible
+            accessibilityLabel={`${meta.label} active`}
+            style={[
+              styles.chip,
+              { borderColor: meta.color, backgroundColor: ui.surfaceRaised },
+            ]}
           >
             <View style={[styles.dot, { backgroundColor: meta.color }]} />
             <Text style={[styles.label, { color: meta.color }]} numberOfLines={1}>
               {meta.label}
             </Text>
-            <View style={styles.track}>
+            <View style={[styles.track, { backgroundColor: ui.border }]}>
               <View
                 style={[
                   styles.fill,
@@ -73,7 +80,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
     overflow: 'hidden',
   },
   fill: { height: 4, borderRadius: 2 },

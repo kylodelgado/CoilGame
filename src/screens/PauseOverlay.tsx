@@ -1,55 +1,70 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { GameController } from '../runtime/GameController';
-import { useSkin } from '../skins/SkinProvider';
+import { GlowButton, Panel, useTheme } from '../ui';
 
 interface PauseOverlayProps {
   controller: GameController;
+  /**
+   * Restart hook: the screen wraps controller.restart() so it can also bump
+   * the renderer's resetKey. Defaults to a plain controller.restart().
+   */
+  onRestart?: () => void;
   /** Navigate Home after forfeiting. */
   onQuitToHome: () => void;
 }
 
 /**
  * Shown over the GameScreen while PAUSED (manual or auto-pause); the board stays
- * visible behind it (FR-P5). Resume returns to the countdown, Restart begins a
- * fresh run with the same config, and Quit forfeits — controller.quit() already
- * guarantees no score is recorded — then navigates Home. (FR-P3, FR-P6)
+ * visible behind the scrim (FR-P5). Resume returns to the countdown, Restart
+ * begins a fresh run with the same config, and Quit forfeits — controller.quit()
+ * already guarantees no score is recorded — then navigates Home. (FR-P3, FR-P6)
  */
-export function PauseOverlay({ controller, onQuitToHome }: PauseOverlayProps) {
-  const skin = useSkin();
+export function PauseOverlay({
+  controller,
+  onRestart,
+  onQuitToHome,
+}: PauseOverlayProps) {
+  const { ui, spacing, type } = useTheme();
 
   return (
-    <View testID="pause-overlay" style={styles.overlay}>
-      <Text style={[styles.title, { color: skin.snakeHead }]}>Paused</Text>
+    <View
+      testID="pause-overlay"
+      accessibilityViewIsModal
+      style={[styles.overlay, { backgroundColor: ui.scrim }]}
+    >
+      <Panel style={[styles.panel, { gap: spacing.md }]}>
+        <Text
+          accessibilityRole="header"
+          style={[type.title, styles.title, { color: ui.textPrimary }]}
+        >
+          Paused
+        </Text>
 
-      <Pressable
-        testID="resume-button"
-        accessibilityRole="button"
-        onPress={() => controller.resume()}
-        style={styles.primaryButton}
-      >
-        <Text style={styles.primaryLabel}>Resume</Text>
-      </Pressable>
+        <GlowButton
+          testID="resume-button"
+          label="Resume"
+          variant="primary"
+          onPress={() => controller.resume()}
+        />
 
-      <Pressable
-        testID="restart-button"
-        accessibilityRole="button"
-        onPress={() => controller.restart()}
-        style={styles.button}
-      >
-        <Text style={styles.label}>Restart</Text>
-      </Pressable>
+        <GlowButton
+          testID="restart-button"
+          label="Restart"
+          variant="secondary"
+          onPress={onRestart ?? (() => controller.restart())}
+        />
 
-      <Pressable
-        testID="quit-button"
-        accessibilityRole="button"
-        onPress={() => {
-          controller.quit(); // forfeit — never records a score
-          onQuitToHome();
-        }}
-        style={styles.button}
-      >
-        <Text style={styles.label}>Quit to Home</Text>
-      </Pressable>
+        <GlowButton
+          testID="quit-button"
+          label="Quit to Home"
+          variant="secondary"
+          accessibilityHint="Forfeits the run without recording a score"
+          onPress={() => {
+            controller.quit(); // forfeit — never records a score
+            onQuitToHome();
+          }}
+        />
+      </Panel>
     </View>
   );
 }
@@ -63,22 +78,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 24,
   },
-  title: { fontSize: 36, fontWeight: '800', marginBottom: 16 },
-  primaryButton: {
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#1f6f1f',
-  },
-  primaryLabel: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  button: {
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#1a1a1a',
-  },
-  label: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  panel: { alignSelf: 'stretch', maxWidth: 420 },
+  title: { textAlign: 'center', marginBottom: 4 },
 });

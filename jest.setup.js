@@ -29,6 +29,29 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// @expo/vector-icons drags in expo-font -> expo-asset, which is not installed;
+// stand each icon set in with a Text rendering the glyph name so themed
+// screens (IconButton, chips, medals) mount and remain queryable under jest.
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const createIconSet = () => {
+    const Icon = ({ name, ...props }) =>
+      React.createElement(Text, props, String(name ?? ''));
+    Icon.glyphMap = {};
+    return Icon;
+  };
+  return {
+    __esModule: true,
+    Ionicons: createIconSet(),
+    MaterialIcons: createIconSet(),
+    MaterialCommunityIcons: createIconSet(),
+    FontAwesome: createIconSet(),
+    Feather: createIconSet(),
+    createIconSet,
+  };
+});
+
 // expo-haptics talks to a native module; no-op it so production code paths that
 // reference it load safely under jest. Tests asserting haptics mock it locally.
 jest.mock('expo-haptics', () => ({
@@ -46,10 +69,27 @@ jest.mock('expo-haptics', () => ({
 jest.mock('@shopify/react-native-skia', () => {
   const React = require('react');
   const { View } = require('react-native');
+  // Forward identifying/geometry props onto the stand-in View so tests can
+  // find a drawn node by testID and assert its size. Spying on the module's
+  // exported element can't work: a component captures its own import binding
+  // at module load, long before a spy is installed.
   const passthrough =
     () =>
-    ({ children }) =>
-      React.createElement(View, null, children ?? null);
+    ({ children, testID, width, height, x, y, color }) =>
+      React.createElement(
+        View,
+        {
+          testID,
+          'data-width': width,
+          'data-height': height,
+          'data-x': x,
+          'data-y': y,
+          'data-color': color,
+        },
+        children ?? null,
+      );
+  // Whether stubbed useImage() hands back a decoded image; see __setImagesDecoded.
+  const imageState = { decoded: true };
   // A fresh recording path per Make(): tests assert on what geometry a builder
   // emitted, which a shared no-op singleton could never show.
   const makePath = () => {
@@ -91,8 +131,18 @@ jest.mock('@shopify/react-native-skia', () => {
     Blur: passthrough(),
     vec: (x, y) => ({ x, y }),
     useClock: () => ({ value: 0 }),
-    // Stand in for a decoded SkImage so sprite-backed trees mount.
-    useImage: () => ({ width: () => 320, height: () => 320 }),
+    // Stand in for a decoded SkImage so sprite-backed trees mount. Tests that
+    // exercise the "still decoding" fallbacks flip this through the helper
+    // below rather than spying: a component captures its own `useImage` import
+    // binding, so a spy installed afterwards is never consulted.
+    useImage: (source) =>
+      source != null && imageState.decoded
+        ? { width: () => 320, height: () => 320 }
+        : null,
+    /** Test-only: make every useImage() return null (undecoded). */
+    __setImagesDecoded: (decoded) => {
+      imageState.decoded = decoded;
+    },
     Skia: {
       Path: { Make: makePath },
       XYWHRect: (x, y, width, height) => ({ x, y, width, height }),

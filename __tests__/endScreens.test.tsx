@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { Share } from 'react-native';
+import { act, render, screen, fireEvent } from '@testing-library/react-native';
 import { PauseOverlay } from '../src/screens/PauseOverlay';
 import { WinScreen } from '../src/screens/WinScreen';
 import { LossScreen } from '../src/screens/LossScreen';
@@ -7,9 +8,10 @@ import { useScoresStore } from '../src/state/useScoresStore';
 import type { GameController } from '../src/runtime/GameController';
 
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
 let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: jest.fn() }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace, back: jest.fn() }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -34,10 +36,21 @@ function makeMockController() {
 const wrap = (node: React.ReactElement) =>
   render(<SkinProvider>{node}</SkinProvider>);
 
+/** Let the AnimatedNumber count-up finish so score assertions see the total. */
+const settleCountUp = () =>
+  act(() => {
+    jest.advanceTimersByTime(1200);
+  });
+
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
   mockParams = {};
   useScoresStore.setState({ bests: {}, hydrated: true });
+});
+afterEach(() => {
+  jest.clearAllTimers();
+  jest.useRealTimers();
 });
 
 describe('PauseOverlay (FR-P3, FR-P6)', () => {
@@ -48,11 +61,26 @@ describe('PauseOverlay (FR-P3, FR-P6)', () => {
     expect(controller.resume).toHaveBeenCalledTimes(1);
   });
 
-  it('Restart calls controller.restart', () => {
+  it('Restart calls controller.restart by default', () => {
     const controller = makeMockController();
     wrap(<PauseOverlay controller={controller} onQuitToHome={jest.fn()} />);
     fireEvent.press(screen.getByTestId('restart-button'));
     expect(controller.restart).toHaveBeenCalledTimes(1);
+  });
+
+  it('Restart prefers a provided onRestart hook (resetKey bump path)', () => {
+    const controller = makeMockController();
+    const onRestart = jest.fn();
+    wrap(
+      <PauseOverlay
+        controller={controller}
+        onRestart={onRestart}
+        onQuitToHome={jest.fn()}
+      />,
+    );
+    fireEvent.press(screen.getByTestId('restart-button'));
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(controller.restart).not.toHaveBeenCalled(); // the hook owns it
   });
 
   it('Quit forfeits: calls controller.quit and navigates Home, no score recorded', () => {
@@ -67,6 +95,14 @@ describe('PauseOverlay (FR-P3, FR-P6)', () => {
     expect(onQuitToHome).toHaveBeenCalledTimes(1);
     expect(recordRun).not.toHaveBeenCalled();
   });
+
+  it('is announced as a modal surface', () => {
+    const controller = makeMockController();
+    wrap(<PauseOverlay controller={controller} onQuitToHome={jest.fn()} />);
+    expect(
+      screen.getByTestId('pause-overlay').props.accessibilityViewIsModal,
+    ).toBe(true);
+  });
 });
 
 describe('WinScreen / LossScreen (FR-UI4)', () => {
@@ -79,6 +115,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
     };
     useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 5 }, hydrated: true });
     wrap(<WinScreen />);
+    settleCountUp();
 
     expect(screen.getByTestId('final-score')).toHaveTextContent('120');
     expect(screen.getByTestId('high-score')).toHaveTextContent('120'); // Solid best
@@ -98,6 +135,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
     };
     useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 200, 'CLASSIC:PORTAL': 5 }, hydrated: true });
     wrap(<WinScreen />);
+    settleCountUp();
 
     // Primary figures still present.
     expect(screen.getByTestId('final-score')).toHaveTextContent('120');
@@ -142,6 +180,7 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
     };
     useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 999, 'CLASSIC:PORTAL': 80 }, hydrated: true });
     wrap(<LossScreen />);
+    settleCountUp();
 
     expect(screen.getByTestId('final-score')).toHaveTextContent('50');
     expect(screen.getByTestId('high-score')).toHaveTextContent('80'); // Portal best
@@ -162,19 +201,31 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
     expect(screen.queryByTestId('new-best')).toBeNull();
   });
 
-  it('Play Again returns to /game with the same preset + wall', () => {
+  it('Play Again returns to /game with the same preset + wall + MODE', () => {
     mockParams = {
       score: '70',
       isNewBest: '0',
       presetId: 'DENSE',
       wall: 'PORTAL',
+      modeId: 'DYNAMIC_WALLS',
     };
     wrap(<LossScreen />);
 
     fireEvent.press(screen.getByTestId('play-again-button'));
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: '/game',
-      params: { presetId: 'DENSE', wall: 'PORTAL' },
+      params: { presetId: 'DENSE', wall: 'PORTAL', modeId: 'DYNAMIC_WALLS' },
+    });
+  });
+
+  it('Play Again defaults the mode to CLASSIC when the param is absent', () => {
+    mockParams = { score: '70', isNewBest: '0', presetId: 'DENSE', wall: 'PORTAL' };
+    wrap(<LossScreen />);
+
+    fireEvent.press(screen.getByTestId('play-again-button'));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/game',
+      params: { presetId: 'DENSE', wall: 'PORTAL', modeId: 'CLASSIC' },
     });
   });
 
@@ -184,5 +235,25 @@ describe('WinScreen / LossScreen (FR-UI4)', () => {
 
     fireEvent.press(screen.getByTestId('home-button'));
     expect(mockReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('View Leaderboard pushes the leaderboard route', () => {
+    mockParams = { score: '70', isNewBest: '0', presetId: 'DENSE', wall: 'PORTAL' };
+    wrap(<LossScreen />);
+
+    fireEvent.press(screen.getByTestId('view-leaderboard-button'));
+    expect(mockPush).toHaveBeenCalledWith('/leaderboard');
+  });
+
+  it('Share invokes the native share sheet with the score', () => {
+    const shareSpy = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: 'sharedAction' } as never);
+    mockParams = { score: '77', isNewBest: '0', presetId: 'CLASSIC', wall: 'SOLID' };
+    wrap(<WinScreen />);
+
+    fireEvent.press(screen.getByTestId('share-button'));
+    expect(shareSpy).toHaveBeenCalledWith({ message: 'I scored 77 in Coil!' });
+    shareSpy.mockRestore();
   });
 });

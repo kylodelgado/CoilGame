@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { Linking } from 'react-native';
+import { act, render, screen, fireEvent } from '@testing-library/react-native';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { SkinProvider } from '../src/skins/SkinProvider';
 import { useSettingsStore } from '../src/state/useSettingsStore';
@@ -16,6 +17,12 @@ jest.mock('expo-router', () => ({
 jest.mock('expo-constants', () => ({
   __esModule: true,
   default: { expoConfig: { name: 'Coil', version: '1.2.3' } },
+}));
+
+// Contract with the monetization agent: the screen calls restorePurchases().
+const mockRestore = jest.fn(() => Promise.resolve([] as string[]));
+jest.mock('../src/services/purchasesInstance', () => ({
+  restorePurchases: () => mockRestore(),
 }));
 
 function makeMockStorage(): jest.Mocked<StoragePort> {
@@ -57,6 +64,17 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
     expect(useSettingsStore.getState().soundEnabled).toBe(false);
     expect(storage.setSettings).toHaveBeenCalledWith(
       expect.objectContaining({ soundEnabled: false }),
+    );
+  });
+
+  it('toggling Music updates the store and persists, independently of Sound', () => {
+    renderSettings();
+    fireEvent(screen.getByTestId('music-toggle'), 'valueChange', false);
+
+    expect(useSettingsStore.getState().musicEnabled).toBe(false);
+    expect(useSettingsStore.getState().soundEnabled).toBe(true); // untouched
+    expect(storage.setSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ musicEnabled: false }),
     );
   });
 
@@ -123,11 +141,15 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
   });
 
   describe('Skin picker (Prompt 33)', () => {
-    it('shows one option per SKIN_IDS', () => {
+    it('shows one option per SKIN_IDS with a human name', () => {
       renderSettings();
       for (const id of SKIN_IDS) {
         expect(screen.getByTestId(`skin-option-${id}`)).toBeOnTheScreen();
       }
+      expect(screen.getByText('Terrarium')).toBeOnTheScreen();
+      expect(screen.getByText('Amber CRT')).toBeOnTheScreen();
+      expect(screen.getByText('Pocket LCD')).toBeOnTheScreen();
+      expect(screen.getByText('Neon')).toBeOnTheScreen();
     });
 
     it('tapping an option calls setSkin and persists that id', () => {
@@ -154,7 +176,7 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
   });
 
   describe('Controls toggle (Prompt 36)', () => {
-    it('defaults to Swipe selected', () => {
+    it('defaults to Slide selected and uses honest labels', () => {
       renderSettings();
       expect(
         screen.getByTestId('control-scheme-SWIPE').props.accessibilityState,
@@ -162,6 +184,10 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
       expect(
         screen.getByTestId('control-scheme-DPAD').props.accessibilityState,
       ).toEqual(expect.objectContaining({ selected: false }));
+      // Honest names: what the gesture actually is.
+      expect(screen.getByText('Slide')).toBeOnTheScreen();
+      expect(screen.getByText('D-Pad')).toBeOnTheScreen();
+      expect(screen.getByText('Joystick')).toBeOnTheScreen();
     });
 
     it('selecting D-pad updates the store and persists', () => {
@@ -178,19 +204,46 @@ describe('SettingsScreen (FR-UI5, FR-A3)', () => {
     });
   });
 
-  describe('Snake FX switcher (temporary)', () => {
-    it('selects an effect into the store and reflects it (not persisted)', () => {
+  describe('developer Snake FX selector removal', () => {
+    it('no snake-effect UI is rendered (dev A/B tool removed; store field kept)', () => {
       renderSettings();
-      fireEvent.press(screen.getByTestId('snake-effect-shimmer'));
+      expect(screen.queryByTestId('snake-effect-sprite')).toBeNull();
+      expect(screen.queryByTestId('snake-effect-shimmer')).toBeNull();
+      // The store field survives for the renderer's default.
+      expect(useSettingsStore.getState().snakeEffect).toBeDefined();
+    });
+  });
 
-      expect(useSettingsStore.getState().snakeEffect).toBe('shimmer');
-      // Temporary/experimental: it does not write to storage.
-      expect(storage.setSettings).not.toHaveBeenCalledWith(
-        expect.objectContaining({ snakeEffect: expect.anything() }),
+  describe('Support & About', () => {
+    it.each([
+      ['how-to-play-link', '/how-to-play'],
+      ['privacy-link', '/legal/privacy'],
+      ['terms-link', '/legal/terms'],
+      ['licenses-link', '/legal/licenses'],
+    ])('%s navigates to %s', (testID, route) => {
+      renderSettings();
+      fireEvent.press(screen.getByTestId(testID));
+      expect(mockPush).toHaveBeenCalledWith(route);
+    });
+
+    it('Restore Purchases calls the purchases service', async () => {
+      renderSettings();
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('restore-purchases-button'));
+      });
+      expect(mockRestore).toHaveBeenCalledTimes(1);
+    });
+
+    it('Contact opens the support mailto link', () => {
+      const openSpy = jest
+        .spyOn(Linking, 'openURL')
+        .mockResolvedValue(undefined as never);
+      renderSettings();
+      fireEvent.press(screen.getByTestId('contact-link'));
+      expect(openSpy).toHaveBeenCalledWith(
+        'mailto:brandonbay9703@gmail.com',
       );
-      expect(
-        screen.getByTestId('snake-effect-shimmer').props.accessibilityState,
-      ).toEqual(expect.objectContaining({ selected: true }));
+      openSpy.mockRestore();
     });
   });
 });

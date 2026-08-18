@@ -12,6 +12,7 @@ function makeMockStorage(
         presetId: 'STANDARD' as const,
         wallBehavior: 'SOLID' as const,
         soundEnabled: true,
+        musicEnabled: true,
         hapticsEnabled: true,
         skinId: 'greenOnBlack' as const,
         controlScheme: 'SWIPE' as const,

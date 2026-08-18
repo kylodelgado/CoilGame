@@ -39,6 +39,7 @@ describe('useSettingsStore', () => {
       presetId: 'DENSE',
       wallBehavior: 'PORTAL',
       soundEnabled: false,
+      musicEnabled: false,
       hapticsEnabled: false,
       skinId: 'amberCrt',
       controlScheme: 'DPAD',
@@ -53,6 +54,7 @@ describe('useSettingsStore', () => {
     expect(state.presetId).toBe('DENSE');
     expect(state.wallBehavior).toBe('PORTAL');
     expect(state.soundEnabled).toBe(false);
+    expect(state.musicEnabled).toBe(false);
     expect(state.hapticsEnabled).toBe(false);
     expect(state.skinId).toBe('amberCrt');
     expect(state.hydrated).toBe(true);
@@ -98,6 +100,24 @@ describe('useSettingsStore', () => {
       ...DEFAULT_SETTINGS,
       soundEnabled: false,
     });
+  });
+
+  it('setMusic updates state and persists the full settings', async () => {
+    const storage = makeMockStorage();
+    await useSettingsStore.getState().hydrate(storage);
+    storage.setSettings.mockClear();
+
+    useSettingsStore.getState().setMusic(false);
+
+    expect(useSettingsStore.getState().musicEnabled).toBe(false);
+    expect(storage.setSettings).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      musicEnabled: false,
+    });
+  });
+
+  it('musicEnabled defaults to true before hydration', () => {
+    expect(useSettingsStore.getState().musicEnabled).toBe(true);
   });
 
   it('setHaptics updates state and persists the full settings', async () => {

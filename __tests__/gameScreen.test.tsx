@@ -1,6 +1,9 @@
 import { BackHandler } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { GameScreen } from '../src/screens/GameScreen';
+import { DynamicLayer } from '../src/render/DynamicLayer';
+import { appAuth } from '../src/services/authInstance';
+import { appLeaderboard } from '../src/services/leaderboardInstance';
 import { SkinProvider } from '../src/skins/SkinProvider';
 import { useScoresStore } from '../src/state/useScoresStore';
 import { useSettingsStore } from '../src/state/useSettingsStore';
@@ -68,6 +71,18 @@ const advance = (ms: number) =>
   act(() => {
     jest.advanceTimersByTime(ms);
   });
+
+/**
+ * A LOST terminal now pauses at the one-per-run revive offer (monetization)
+ * before navigating. Tests that assert the post-loss flow decline it, exactly
+ * like a player tapping "No thanks".
+ */
+function declineReviveIfOffered() {
+  const decline = screen.queryByTestId('revive-decline');
+  if (decline !== null) {
+    fireEvent.press(decline);
+  }
+}
 
 const renderGame = (mode: Mode) =>
   render(
@@ -185,6 +200,30 @@ describe('GameScreen integration', () => {
     spy.mockRestore();
   });
 
+  it('revive accept: mock rewarded ad earns, run returns to TAP_TO_START, no navigation', async () => {
+    const mode = scriptedMode([
+      {
+        // A mid-board 3-cell snake so the engine revive has room to work.
+        state: baseState({ status: 'LOST', score: 50 }),
+        events: ['DIED'],
+      },
+    ]);
+    renderGame(mode);
+    startRunning();
+    advance(100); // -> LOST, revive offer up
+
+    expect(screen.getByTestId('revive-overlay')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('revive-accept'));
+    // Mock rewarded ad resolves 'earned' after its fake delay.
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    expect(mockReplace).not.toHaveBeenCalled(); // stayed in the run
+    expect(screen.queryByTestId('revive-overlay')).not.toBeOnTheScreen();
+    expect(screen.getByTestId('tap-to-start-overlay')).toBeOnTheScreen();
+  });
+
   it('navigates to /loss on a terminal LOST with score and isNewBest', () => {
     const mode = scriptedMode([
       {
@@ -196,6 +235,7 @@ describe('GameScreen integration', () => {
     startRunning();
 
     advance(100);
+    declineReviveIfOffered();
 
     expect(mockReplace).toHaveBeenCalledTimes(1);
     const arg = mockReplace.mock.calls[0][0];
@@ -216,6 +256,7 @@ describe('GameScreen integration', () => {
     );
     startRunning();
     advance(100);
+    declineReviveIfOffered();
 
     // Navigation (local flow) happened...
     expect(mockReplace).toHaveBeenCalledTimes(1);
@@ -316,6 +357,59 @@ describe('GameScreen integration', () => {
     });
   });
 
+  describe('design-pass bug fixes', () => {
+    it('shows the mode + board best chip in the HUD', () => {
+      useScoresStore.setState({ bests: { 'CLASSIC:SOLID': 120 }, hydrated: true });
+      renderGame(scriptedMode([{ state: baseState({ status: 'RUNNING' }), events: [] }]));
+
+      expect(screen.getByTestId('hud-mode-chip')).toHaveTextContent(
+        'Classic · Best 120',
+      );
+    });
+
+    it('restart from pause bumps the resetKey threaded into DynamicLayer', () => {
+      const mode = scriptedMode([
+        { state: baseState({ status: 'RUNNING' }), events: [] },
+      ]);
+      renderGame(mode);
+      startRunning();
+
+      const layer = () => screen.UNSAFE_getByType(DynamicLayer);
+      expect(layer().props.resetKey).toBe(0);
+
+      fireEvent.press(screen.getByTestId('pause-button'));
+      fireEvent.press(screen.getByTestId('restart-button'));
+
+      // The renderer is told to snap (no glide streak from the old body).
+      expect(layer().props.resetKey).toBe(1);
+      expect(screen.getByTestId('tap-to-start-overlay')).toBeOnTheScreen();
+    });
+
+    it('the DEFAULT submitter routes through the app auth/leaderboard singletons', async () => {
+      // Sign the shared identity in; the default submitter must observe it.
+      let user: Awaited<ReturnType<typeof appAuth.signInAnonymously>>;
+      await act(async () => {
+        user = await appAuth.signInAnonymously();
+      });
+
+      const mode = scriptedMode([
+        { state: baseState({ status: 'LOST', score: 50 }), events: ['DIED'] },
+      ]);
+      renderGame(mode); // no submitter prop: the default one is exercised
+      startRunning();
+      advance(100);
+      declineReviveIfOffered();
+
+      const board = { modeId: 'CLASSIC', wall: 'SOLID' } as const;
+      const best = await appLeaderboard.getUserBest(board, user!.uid);
+      expect(best?.score).toBe(50);
+
+      await act(async () => {
+        await appAuth.signOut();
+      });
+    });
+  });
+
   describe('Dynamic Walls routing (Prompt 41)', () => {
     it('routes through dynamicWallsMode and records the run under the DYNAMIC_WALLS key', () => {
       useSettingsStore.setState({ modeId: 'DYNAMIC_WALLS' });
@@ -330,6 +424,7 @@ describe('GameScreen integration', () => {
       startRunning();
       // The snake runs straight into the solid wall and dies (terminal).
       advance(10000);
+      declineReviveIfOffered();
 
       expect(mockReplace).toHaveBeenCalled();
       const nav = mockReplace.mock.calls[0][0];
@@ -404,6 +499,7 @@ describe('GameScreen integration', () => {
 
       startRunning();
       advance(100); // one tick -> terminal LOST
+      declineReviveIfOffered();
 
       expect(recordSpy).toHaveBeenCalledWith('GPS', 'SOLID', expect.any(Number));
       expect(submit).toHaveBeenCalledWith({ modeId: 'GPS', wall: 'SOLID' }, 70);

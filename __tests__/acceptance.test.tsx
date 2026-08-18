@@ -286,6 +286,8 @@ describe('acceptance: full Home -> play -> terminal -> Play Again loop', () => {
     act(() => {
       jest.advanceTimersByTime(100); // one tick -> LOST
     });
+    // The loss pauses at the one-per-run revive offer; decline like a player.
+    fireEvent.press(game.getByTestId('revive-decline'));
     expect(mockReplace).toHaveBeenCalledTimes(1);
     const lossNav = mockReplace.mock.calls[0][0];
     expect(lossNav.pathname).toBe('/loss');
@@ -306,7 +308,8 @@ describe('acceptance: full Home -> play -> terminal -> Play Again loop', () => {
     fireEvent.press(loss.getByTestId('play-again-button'));
     expect(mockReplace).toHaveBeenLastCalledWith({
       pathname: '/game',
-      params: { presetId: 'DENSE', wall: 'PORTAL' },
+      // Play Again carries the FULL board identity, mode included (bug fix).
+      params: { presetId: 'DENSE', wall: 'PORTAL', modeId: 'CLASSIC' },
     });
 
     jest.clearAllTimers();

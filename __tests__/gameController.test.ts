@@ -120,7 +120,7 @@ describe('createGameController (runtime glue)', () => {
     expect(m.onState).not.toHaveBeenCalled();
   });
 
-  it('ATE_FOOD: fires haptics.eat only when enabled, always plays sound', () => {
+  it('ATE_FOOD: fires haptics.eat only when enabled, plays sound while sound is on', () => {
     const initial = makeState({
       snake: [
         { x: 2, y: 2 },
@@ -165,7 +165,7 @@ describe('createGameController (runtime glue)', () => {
     expect(off.sound.play).toHaveBeenCalledWith('ATE_FOOD');
   });
 
-  it('ATE_BONUS: fires haptics.eat only when enabled, never plays sound (Prompt 35)', () => {
+  it('ATE_BONUS: fires haptics.eat only when enabled, plays the bonus sound', () => {
     const initial = makeState({
       snake: [
         { x: 2, y: 2 },
@@ -177,7 +177,7 @@ describe('createGameController (runtime glue)', () => {
       events: ['ATE_BONUS'],
     };
 
-    // Enabled.
+    // Haptics enabled.
     const on = makeMocks();
     const c1 = createGameController({
       mode: scriptedMode(initial, [bonusResult]),
@@ -191,9 +191,9 @@ describe('createGameController (runtime glue)', () => {
     c1.setRunning();
     c1.step();
     expect(on.haptics.eat).toHaveBeenCalledTimes(1);
-    expect(on.sound.play).not.toHaveBeenCalled();
+    expect(on.sound.play).toHaveBeenCalledWith('ATE_BONUS');
 
-    // Disabled.
+    // Haptics disabled — sound still plays (independent toggles).
     const off = makeMocks();
     const c2 = createGameController({
       mode: scriptedMode(initial, [bonusResult]),
@@ -207,7 +207,147 @@ describe('createGameController (runtime glue)', () => {
     c2.setRunning();
     c2.step();
     expect(off.haptics.eat).not.toHaveBeenCalled();
-    expect(off.sound.play).not.toHaveBeenCalled();
+    expect(off.sound.play).toHaveBeenCalledWith('ATE_BONUS');
+  });
+
+  it('GOT_POWERUP: fires haptics.eat when enabled and plays the powerup sound', () => {
+    const initial = makeState({
+      snake: [
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+    const powerupResult: TickResult = {
+      state: { ...initial, status: 'RUNNING' },
+      events: ['GOT_POWERUP'],
+    };
+    const m = makeMocks();
+    const c = createGameController({
+      mode: scriptedMode(initial, [powerupResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      ...m,
+    });
+    c.tapToStart();
+    c.setRunning();
+    c.step();
+    expect(m.haptics.eat).toHaveBeenCalledTimes(1);
+    expect(m.sound.play).toHaveBeenCalledWith('GOT_POWERUP');
+  });
+
+  it('EFFECT_EXPIRED: plays the expire sound, no haptic', () => {
+    const initial = makeState({
+      snake: [
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+    const expiredResult: TickResult = {
+      state: { ...initial, status: 'RUNNING' },
+      events: ['EFFECT_EXPIRED'],
+    };
+    const m = makeMocks();
+    const c = createGameController({
+      mode: scriptedMode(initial, [expiredResult]),
+      config: realConfig(),
+      rng: createSeededRandom(1),
+      isHapticsEnabled: () => true,
+      isSoundEnabled: () => true,
+      ...m,
+    });
+    c.tapToStart();
+    c.setRunning();
+    c.step();
+    expect(m.haptics.eat).not.toHaveBeenCalled();
+    expect(m.haptics.death).not.toHaveBeenCalled();
+    expect(m.sound.play).toHaveBeenCalledWith('EFFECT_EXPIRED');
+  });
+
+  describe('sound gating (the Settings toggle must actually gate SFX)', () => {
+    const initial = makeState({
+      snake: [
+        { x: 2, y: 2 },
+        { x: 1, y: 2 },
+      ],
+    });
+
+    // Every sounding engine event, with the sound each should trigger.
+    const cases: Array<{ event: TickResult['events'][number]; sfx: string }> = [
+      { event: 'ATE_FOOD', sfx: 'ATE_FOOD' },
+      { event: 'ATE_BONUS', sfx: 'ATE_BONUS' },
+      { event: 'GOT_POWERUP', sfx: 'GOT_POWERUP' },
+      { event: 'EFFECT_EXPIRED', sfx: 'EFFECT_EXPIRED' },
+      { event: 'DIED', sfx: 'DIED' },
+      { event: 'WON', sfx: 'WON' },
+    ];
+
+    function run(event: TickResult['events'][number], soundOn: boolean) {
+      const terminal = event === 'DIED' || event === 'WON';
+      const result: TickResult = {
+        state: {
+          ...initial,
+          status: terminal ? (event === 'DIED' ? 'LOST' : 'WON') : 'RUNNING',
+        },
+        events: [event],
+      };
+      const m = makeMocks();
+      const c = createGameController({
+        mode: scriptedMode(initial, [result]),
+        config: realConfig(),
+        rng: createSeededRandom(1),
+        isHapticsEnabled: () => true,
+        isSoundEnabled: () => soundOn,
+        ...m,
+      });
+      c.tapToStart();
+      c.setRunning();
+      c.step();
+      return m;
+    }
+
+    it.each(cases)('$event plays $sfx when sound is enabled', ({ event, sfx }) => {
+      const m = run(event, true);
+      expect(m.sound.play).toHaveBeenCalledWith(sfx);
+      expect(m.sound.play).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(cases)('$event stays silent when sound is disabled', ({ event }) => {
+      const m = run(event, false);
+      expect(m.sound.play).not.toHaveBeenCalled();
+    });
+
+    it('sound-off still fires haptics (independent toggles)', () => {
+      const m = run('ATE_FOOD', false);
+      expect(m.haptics.eat).toHaveBeenCalledTimes(1);
+      expect(m.sound.play).not.toHaveBeenCalled();
+    });
+
+    it('reads the toggle live at step time (not captured at construction)', () => {
+      const ateResult: TickResult = {
+        state: { ...initial, status: 'RUNNING' },
+        events: ['ATE_FOOD'],
+      };
+      let soundOn = false;
+      const m = makeMocks();
+      const c = createGameController({
+        mode: scriptedMode(initial, [ateResult, ateResult]),
+        config: realConfig(),
+        rng: createSeededRandom(1),
+        isHapticsEnabled: () => true,
+        isSoundEnabled: () => soundOn,
+        ...m,
+      });
+      c.tapToStart();
+      c.setRunning();
+      c.step();
+      expect(m.sound.play).not.toHaveBeenCalled();
+
+      soundOn = true; // user flips the toggle mid-run
+      c.step();
+      expect(m.sound.play).toHaveBeenCalledWith('ATE_FOOD');
+    });
   });
 
   it('BONUS_EXPIRED: triggers no haptic and no sound (Prompt 35)', () => {

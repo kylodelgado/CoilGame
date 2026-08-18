@@ -1,7 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { createExpoHaptics } from '../src/services/HapticsPort';
-import { createSilentSound } from '../src/services/SoundPort';
-import type { GameEvent } from '../src/engine/types';
+import { createSilentSound, type SoundEvent } from '../src/services/SoundPort';
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(() => Promise.resolve()),
@@ -61,9 +60,20 @@ describe('createExpoHaptics (EH-9)', () => {
 });
 
 describe('createSilentSound (EH-10)', () => {
-  const events: GameEvent[] = ['ATE_FOOD', 'DIED', 'WON'];
+  const events: SoundEvent[] = [
+    'ATE_FOOD',
+    'ATE_BONUS',
+    'DIED',
+    'WON',
+    'GOT_POWERUP',
+    'EFFECT_EXPIRED',
+    'UI_TAP',
+    'COUNTDOWN_TICK',
+    'GO',
+    'REVIVE',
+  ];
 
-  it('play() does not throw for any GameEvent', () => {
+  it('play() does not throw for any SoundEvent', () => {
     const sound = createSilentSound();
     for (const event of events) {
       expect(() => sound.play(event)).not.toThrow();

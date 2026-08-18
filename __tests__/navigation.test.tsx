@@ -23,6 +23,7 @@ function makeMockStorage(): jest.Mocked<StoragePort> {
         presetId: 'STANDARD' as const,
         wallBehavior: 'SOLID' as const,
         soundEnabled: true,
+        musicEnabled: true,
         hapticsEnabled: true,
         skinId: 'greenOnBlack' as const,
         controlScheme: 'SWIPE' as const,
@@ -41,13 +42,13 @@ beforeEach(() => {
 });
 
 describe('navigation scaffold', () => {
-  it('renders the Home stub without crashing inside the providers', () => {
+  it('renders the Home screen without crashing inside the providers', () => {
     render(
       <AppProviders storage={makeMockStorage()}>
         <HomeScreen />
       </AppProviders>,
     );
-    expect(screen.getByText('Coil')).toBeOnTheScreen();
+    expect(screen.getByText('COIL')).toBeOnTheScreen();
   });
 
   it('navigates toward the game route when Play is pressed', () => {

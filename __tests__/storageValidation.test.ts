@@ -13,6 +13,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       presetId: 'DENSE',
       wallBehavior: 'PORTAL',
       soundEnabled: false,
+      musicEnabled: false,
       hapticsEnabled: true,
       skinId: 'neon',
       controlScheme: 'DPAD',
@@ -40,6 +41,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       presetId: 'STANDARD',
       wallBehavior: 'PORTAL',
       soundEnabled: DEFAULT_SETTINGS.soundEnabled,
+      musicEnabled: DEFAULT_SETTINGS.musicEnabled,
       hapticsEnabled: DEFAULT_SETTINGS.hapticsEnabled,
       skinId: DEFAULT_SETTINGS.skinId,
       controlScheme: DEFAULT_SETTINGS.controlScheme,
@@ -58,6 +60,7 @@ describe('validateSettings (EH-1, §8.5)', () => {
       presetId: DEFAULT_SETTINGS.presetId,
       wallBehavior: DEFAULT_SETTINGS.wallBehavior,
       soundEnabled: true,
+      musicEnabled: DEFAULT_SETTINGS.musicEnabled,
       hapticsEnabled: false,
       skinId: DEFAULT_SETTINGS.skinId,
       controlScheme: DEFAULT_SETTINGS.controlScheme,
@@ -140,6 +143,40 @@ describe('validateSettings (EH-1, §8.5)', () => {
         controlScheme: 'DPAD',
       });
       expect(result.controlScheme).toBe('DPAD');
+    });
+  });
+
+  describe('musicEnabled (audio phase, additive field)', () => {
+    it('defaults to true when the blob has none (backward compatible)', () => {
+      // An old coil.settings.v1 blob from before music was persisted.
+      const legacy = {
+        presetId: 'CLASSIC',
+        wallBehavior: 'SOLID',
+        soundEnabled: true,
+        hapticsEnabled: true,
+      };
+      expect(validateSettings(legacy).musicEnabled).toBe(true);
+      expect(DEFAULT_SETTINGS.musicEnabled).toBe(true);
+    });
+
+    it('falls back to the default for a wrong-typed musicEnabled', () => {
+      for (const bad of ['yes', 0, 1, null, [], {}]) {
+        expect(
+          validateSettings({ ...DEFAULT_SETTINGS, musicEnabled: bad })
+            .musicEnabled,
+        ).toBe(DEFAULT_SETTINGS.musicEnabled);
+      }
+    });
+
+    it('passes a valid musicEnabled through (incl. false)', () => {
+      expect(
+        validateSettings({ ...DEFAULT_SETTINGS, musicEnabled: false })
+          .musicEnabled,
+      ).toBe(false);
+      expect(
+        validateSettings({ ...DEFAULT_SETTINGS, musicEnabled: true })
+          .musicEnabled,
+      ).toBe(true);
     });
   });
 

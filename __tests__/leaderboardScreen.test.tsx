@@ -179,4 +179,45 @@ describe('LeaderboardScreen', () => {
       expect(lb.getTopScores.mock.calls.length).toBeGreaterThan(initialCalls);
     });
   });
+
+  it('pull-to-refresh re-queries without dropping into the loading state', async () => {
+    const lb = makeLeaderboard([entry('u2', 'Bo', 300, 1)]);
+    renderBoard(lb);
+    const list = await screen.findByTestId('lb-list');
+    const initialCalls = lb.getTopScores.mock.calls.length;
+
+    await act(async () => {
+      list.props.refreshControl.props.onRefresh();
+    });
+
+    expect(lb.getTopScores.mock.calls.length).toBeGreaterThan(initialCalls);
+    // Silent refresh: the list stayed mounted, no lb-loading flash.
+    expect(screen.getByTestId('lb-list')).toBeOnTheScreen();
+    expect(screen.queryByTestId('lb-loading')).toBeNull();
+  });
+
+  it('composes a full accessibility label per row', async () => {
+    const lb = makeLeaderboard([entry('u3', 'Ada', 420, 3)]);
+    renderBoard(lb);
+
+    const row = await screen.findByTestId('lb-entry-u3');
+    expect(row.props.accessibilityLabel).toBe('Rank 3, Ada, 420 points');
+  });
+
+  it('gives the top three rows medal treatment; rank 4 keeps a plain rank number', async () => {
+    const lb = makeLeaderboard([
+      entry('u1', 'Au', 400, 1),
+      entry('u2', 'Ag', 300, 2),
+      entry('u3', 'Cu', 200, 3),
+      entry('u4', 'Dee', 100, 4),
+    ]);
+    renderBoard(lb);
+    await screen.findByTestId('lb-list');
+
+    // Medal glyphs replace the numeral for ranks 1–3 (the jest icon stub
+    // renders the glyph name as text)...
+    expect(screen.getAllByText('medal')).toHaveLength(3);
+    // ...while rank 4 still shows its number.
+    expect(screen.getByText('4')).toBeOnTheScreen();
+  });
 });

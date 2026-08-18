@@ -5,8 +5,7 @@ import { useSettingsStore } from '../src/state/useSettingsStore';
 import { useScoresStore } from '../src/state/useScoresStore';
 import { DEFAULT_SETTINGS } from '../src/services/StoragePort';
 
-// Skia + Reanimated are stubbed globally in jest.setup.js (incl. useClock and the
-// worklet hooks the smooth-snake renderer uses); no per-file mock needed.
+// Skia + Reanimated + vector icons are stubbed globally in jest.setup.js.
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -57,43 +56,55 @@ describe('HomeScreen selection flow (FR-UI1/UI2)', () => {
     });
   });
 
-  it('renders both high scores for the selected mode', () => {
+  it('shows the best for the CURRENT mode×wall board, following the wall toggle', () => {
     useScoresStore.setState({
       bests: { 'CLASSIC:SOLID': 120, 'CLASSIC:PORTAL': 80 },
       hydrated: true,
     });
     renderHome();
 
-    expect(screen.getByTestId('best-solid')).toHaveTextContent('120');
-    expect(screen.getByTestId('best-portal')).toHaveTextContent('80');
+    // Defaults: CLASSIC + SOLID.
+    expect(screen.getByTestId('best-score')).toHaveTextContent('120');
+
+    fireEvent.press(screen.getByTestId('wall-PORTAL'));
+    expect(screen.getByTestId('best-score')).toHaveTextContent('80');
   });
 
   describe('mode picker (Prompt 40)', () => {
-    it('selecting a mode updates the store and the shown scores follow the mode', () => {
+    it('selecting a mode updates the store and the shown best follows the mode', () => {
       useScoresStore.setState({
         bests: {
           'CLASSIC:SOLID': 120,
-          'CLASSIC:PORTAL': 80,
           'DYNAMIC_WALLS:SOLID': 45,
-          'DYNAMIC_WALLS:PORTAL': 12,
         },
         hydrated: true,
       });
       renderHome();
 
       // Defaults to CLASSIC.
-      expect(screen.getByTestId('best-solid')).toHaveTextContent('120');
-      expect(screen.getByTestId('best-portal')).toHaveTextContent('80');
+      expect(screen.getByTestId('best-score')).toHaveTextContent('120');
 
       fireEvent.press(screen.getByTestId('mode-DYNAMIC_WALLS'));
 
       expect(useSettingsStore.getState().modeId).toBe('DYNAMIC_WALLS');
-      expect(screen.getByTestId('best-solid')).toHaveTextContent('45');
-      expect(screen.getByTestId('best-portal')).toHaveTextContent('12');
+      expect(screen.getByTestId('best-score')).toHaveTextContent('45');
       expect(
         screen.getByTestId('mode-DYNAMIC_WALLS').props.accessibilityState
           .selected,
       ).toBe(true);
+    });
+
+    it('mode cards carry a one-line rules blurb', () => {
+      renderHome();
+      expect(
+        screen.getByText('Eat, grow, don’t bite yourself'),
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByText('Walls build themselves mid-run'),
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByText('A vast world beyond the screen — follow the arrow'),
+      ).toBeOnTheScreen();
     });
 
     it('Play passes the selected mode', () => {
@@ -129,5 +140,17 @@ describe('HomeScreen selection flow (FR-UI1/UI2)', () => {
     renderHome();
     fireEvent.press(screen.getByTestId('leaderboard-button'));
     expect(mockPush).toHaveBeenCalledWith('/leaderboard');
+  });
+
+  it('renders the COIL wordmark', () => {
+    renderHome();
+    expect(screen.getByText('COIL')).toBeOnTheScreen();
+  });
+
+  it('renders the key-art hero and the world backdrop layers', () => {
+    renderHome();
+    expect(screen.getByTestId('home-hero')).toBeOnTheScreen();
+    expect(screen.getByTestId('shell-world-backdrop')).toBeOnTheScreen();
+    expect(screen.getByTestId('shell-world-scrim')).toBeOnTheScreen();
   });
 });

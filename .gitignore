@@ -42,3 +42,7 @@ yarn-error.*
 
 # Blender autosave
 *.blend1
+
+# Python bytecode from the Blender art pipeline (art/*.py)
+__pycache__/
+*.pyc

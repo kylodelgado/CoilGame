@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   presetId: 'STANDARD',
   wallBehavior: 'SOLID',
   soundEnabled: true,
+  musicEnabled: true,
   hapticsEnabled: true,
   skinId: 'greenOnBlack',
   controlScheme: 'SWIPE',
@@ -96,6 +97,10 @@ export function validateSettings(raw: unknown): PersistedSettings {
       typeof raw.soundEnabled === 'boolean'
         ? raw.soundEnabled
         : DEFAULT_SETTINGS.soundEnabled,
+    musicEnabled:
+      typeof raw.musicEnabled === 'boolean'
+        ? raw.musicEnabled
+        : DEFAULT_SETTINGS.musicEnabled,
     hapticsEnabled:
       typeof raw.hapticsEnabled === 'boolean'
         ? raw.hapticsEnabled

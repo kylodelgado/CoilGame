@@ -14,6 +14,7 @@ interface SettingsState {
   presetId: PresetId;
   wallBehavior: WallBehavior;
   soundEnabled: boolean;
+  musicEnabled: boolean;
   hapticsEnabled: boolean;
   skinId: SkinId;
   controlScheme: ControlScheme;
@@ -26,6 +27,7 @@ interface SettingsState {
   setPreset(p: PresetId): void;
   setWall(w: WallBehavior): void;
   setSound(on: boolean): void;
+  setMusic(on: boolean): void;
   setHaptics(on: boolean): void;
   setSkin(id: SkinId): void;
   setControlScheme(s: ControlScheme): void;
@@ -42,6 +44,7 @@ function toPersisted(state: SettingsState): PersistedSettings {
     presetId: state.presetId,
     wallBehavior: state.wallBehavior,
     soundEnabled: state.soundEnabled,
+    musicEnabled: state.musicEnabled,
     hapticsEnabled: state.hapticsEnabled,
     skinId: state.skinId,
     controlScheme: state.controlScheme,
@@ -86,6 +89,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     setSound(on: boolean): void {
       set({ soundEnabled: on });
+      persist();
+    },
+
+    setMusic(on: boolean): void {
+      set({ musicEnabled: on });
       persist();
     },
 

@@ -207,6 +207,8 @@ export interface PersistedSettings {
   presetId: PresetId;
   wallBehavior: WallBehavior;
   soundEnabled: boolean;
+  /** Ambient theme music toggle, independent of SFX. (audio phase, additive) */
+  musicEnabled: boolean;
   hapticsEnabled: boolean;
   skinId: SkinId;
   controlScheme: ControlScheme;

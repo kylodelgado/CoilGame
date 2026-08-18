@@ -1,4 +1,5 @@
 import { enqueueDirection } from '../engine';
+import { revive as engineRevive } from '../engine/revive';
 import type {
   Direction,
   GameConfig,
@@ -35,7 +36,7 @@ export interface GameControllerDeps {
   sound: SoundPort;
   /** Reads the live settings store. */
   isHapticsEnabled: () => boolean;
-  /** Reads the live settings store. Reserved for Phase 2 SFX gating. */
+  /** Reads the live settings store; gates every sound.play call. */
   isSoundEnabled: () => boolean;
   /**
    * Monotonic clock (ms) for run-time tracking. Injected so tests are
@@ -64,6 +65,14 @@ export interface GameController {
   resume(): void;
   restart(): void;
   quit(): void;
+  /**
+   * Post-loss revive (rewarded-ad / premium flow): applies the pure engine
+   * revive rule to the LOST state, returning the run to TAP_TO_START with
+   * score preserved. Returns false when revive is unavailable (not LOST, or
+   * no safe cell exists on a near-full grid) — the caller then proceeds to
+   * the loss screen as usual.
+   */
+  revive(): boolean;
 }
 
 /**
@@ -82,6 +91,7 @@ export function createGameController(deps: GameControllerDeps): GameController {
     haptics,
     sound,
     isHapticsEnabled,
+    isSoundEnabled,
     clock = Date.now,
     recordRun,
     onState,
@@ -150,40 +160,58 @@ export function createGameController(deps: GameControllerDeps): GameController {
       state = result.state;
       onState(state);
 
+      // Every sound is gated on the Settings toggle, mirroring haptics gating.
+      const soundOn = isSoundEnabled();
       for (const event of result.events) {
         switch (event) {
           case 'ATE_FOOD':
             if (isHapticsEnabled()) {
               haptics.eat();
             }
-            sound.play('ATE_FOOD');
+            if (soundOn) {
+              sound.play('ATE_FOOD');
+            }
             break;
           case 'ATE_BONUS':
-            // Reuse the eat haptic; sound is out of scope this phase.
+            // Reuse the eat haptic; the sparkle arp marks the bonus grab.
             if (isHapticsEnabled()) {
               haptics.eat();
             }
+            if (soundOn) {
+              sound.play('ATE_BONUS');
+            }
             break;
           case 'BONUS_EXPIRED':
-            // No side effect — the bonus simply despawned.
+            // Deliberately silent — expiry of an uncollected bonus shouldn't
+            // punish attention.
             break;
           case 'GOT_POWERUP':
             // A powerup was grabbed — reuse the eat haptic for tactile feedback.
             if (isHapticsEnabled()) {
               haptics.eat();
             }
+            if (soundOn) {
+              sound.play('GOT_POWERUP');
+            }
             break;
           case 'EFFECT_EXPIRED':
-            // A timed effect ended; no haptic/sound this phase.
+            // Soft descending blip; no haptic (it isn't a player action).
+            if (soundOn) {
+              sound.play('EFFECT_EXPIRED');
+            }
             break;
           case 'DIED':
             if (isHapticsEnabled()) {
               haptics.death();
             }
-            sound.play('DIED');
+            if (soundOn) {
+              sound.play('DIED');
+            }
             break;
           case 'WON':
-            sound.play('WON');
+            if (soundOn) {
+              sound.play('WON');
+            }
             break;
         }
       }
@@ -225,6 +253,22 @@ export function createGameController(deps: GameControllerDeps): GameController {
       // Mark forfeited and stop advancing. Navigation is the screen's job;
       // crucially, a forfeit must never record a score. (FR-P6)
       forfeited = true;
+    },
+
+    revive(): boolean {
+      const next = engineRevive(state, config);
+      if (next === state) {
+        // Unchanged reference: not LOST, or no safe cell — revive unavailable.
+        return false;
+      }
+      state = next;
+      // A fresh TAP_TO_START segment; the run clock resumes on the next start.
+      runStartedAt = null;
+      if (isSoundEnabled()) {
+        sound.play('REVIVE');
+      }
+      onState(state);
+      return true;
     },
   };
 }

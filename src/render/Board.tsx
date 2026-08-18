@@ -15,11 +15,20 @@ import {
 } from '@shopify/react-native-skia';
 import type { GridSpec } from '../engine/types';
 import { useSkin } from '../skins/SkinProvider';
+import { getBoardBackdropSource } from './boardBackdrops';
+import { BoardEdge, type WallBehavior } from './BoardEdge';
 import { darken, mix, withAlpha } from './color';
 import { cellRect } from './geometry';
 
 interface BoardProps {
   gridSpec: GridSpec;
+  /**
+   * Wall behavior of the current mode, rendered as a rim treatment so the
+   * board itself says what its edge does: SOLID gets an inner shadow + thin
+   * warm line, PORTAL a soft pass-through glow in the skin's head color.
+   * Undefined (the default) draws no edge treatment. (wall edge)
+   */
+  wall?: WallBehavior;
 }
 
 /**
@@ -37,16 +46,20 @@ interface BoardProps {
  * and nothing else, which keeps cells aimable without ruling the board into
  * graph paper.
  */
-function BoardComponent({ gridSpec }: BoardProps) {
+function BoardComponent({ gridSpec, wall }: BoardProps) {
   const skin = useSkin();
   const { columns, rows, cellSize, originX, originY } = gridSpec;
   const corner = skin.cellShape === 'rounded' ? cellSize / 4 : 0;
   const gridStyle = skin.gridStyle ?? (skin.gridLine !== null ? 'lines' : 'none');
   const boardW = columns * cellSize;
   const boardH = rows * cellSize;
+  // Which backdrop this skin uses (null = none mapped → organic fallback only).
+  const backdropSource = getBoardBackdropSource(skin.id);
   // Decoded lazily; until then the boardOrganic gradient below stands in.
-  const backdrop = useImage(require('../../assets/board/backdrop.png'));
-  const showBackdrop = Boolean(skin.boardBackdrop && backdrop);
+  const backdrop = useImage(backdropSource);
+  const showBackdrop = Boolean(
+    skin.boardBackdrop && backdropSource !== null && backdrop,
+  );
 
   const cells: React.ReactNode[] = [];
   if (gridStyle === 'lines' && skin.gridLine !== null) {
@@ -145,6 +158,19 @@ function BoardComponent({ gridSpec }: BoardProps) {
           style="stroke"
           strokeWidth={Math.max(1.5, cellSize * 0.07)}
           strokeCap="round"
+        />
+      )}
+      {wall !== undefined && (
+        /* Rim last, over backdrop and grid, so the edge cue always reads. */
+        <BoardEdge
+          x={originX}
+          y={originY}
+          width={boardW}
+          height={boardH}
+          cellSize={cellSize}
+          wall={wall}
+          obstacleColor={skin.obstacleColor}
+          headColor={skin.snakeHead}
         />
       )}
     </Canvas>

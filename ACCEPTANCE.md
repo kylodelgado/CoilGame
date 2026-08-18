@@ -3,7 +3,7 @@
 Final integration pass. **No new game logic** — wiring verification, persistence,
 gating, dead-code sweep, and a Definition-of-Done mapping.
 
-- **Suite:** 31 test files · 203 tests · all green.
+- **Suite:** 65 test files · 656 tests · all green (post-release-polish pass).
 - **Typecheck:** `tsc --noEmit` clean (TypeScript strict).
 - **Build/run:** Expo SDK 56 managed workflow; portrait-locked via `app.json`.
   Launch with `npx expo start` → iOS (`i`) / Android (`a`).

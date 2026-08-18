@@ -1,7 +1,7 @@
 # Maestro smoke flow for Coil: home -> play -> die -> play again -> home.
 # Run with: maestro test .maestro/smoke.yaml
 # Requires a dev/standalone build installed on a device/emulator.
-appId: com.coil.app
+appId: com.kylo.delgado.coil
 ---
 - launchApp:
     clearState: true

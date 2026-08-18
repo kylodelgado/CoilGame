@@ -19,6 +19,12 @@ export interface AuthPort {
   signUp(email: string, password: string, displayName: string): Promise<AuthUser>;
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
+  /**
+   * Permanently delete the current account and sign out. OPTIONAL: adapters
+   * that cannot delete (or have not wired it yet) may omit it; the UI calls it
+   * via optional chaining and hides/disables the flow when absent.
+   */
+  deleteAccount?(): Promise<void>;
 }
 
 /**
@@ -88,6 +94,20 @@ export function createInMemoryAuth(): AuthPort {
     },
 
     signOut(): Promise<void> {
+      setCurrent(null);
+      return Promise.resolve();
+    },
+
+    deleteAccount(): Promise<void> {
+      // Remove the signed-in user's credential record (if any) and sign out,
+      // so the account is really gone: signing in again must fail.
+      if (current !== null) {
+        for (const [email, record] of credentials) {
+          if (record.user.uid === current.uid) {
+            credentials.delete(email);
+          }
+        }
+      }
       setCurrent(null);
       return Promise.resolve();
     },

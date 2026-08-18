@@ -1,11 +1,12 @@
-import {
-  createInMemoryLeaderboard,
-  type LeaderboardPort,
-} from './LeaderboardPort';
+import type { LeaderboardPort } from './LeaderboardPort';
+import { buildFirebasePorts } from './firebaseSdk';
+import { createPersistentLocalLeaderboard } from './localPersistence';
 
 /**
  * App-wide LeaderboardPort singleton, shared by the leaderboard screen and the
- * score submitter. In-memory for now; swap to createFirebaseLeaderboard(...) at
- * the composition root once Firebase is wired.
+ * score submitter. Firebase/Firestore-backed when `extra.firebase` is
+ * configured (firebaseSdk.ts); otherwise a device-local persistent board, so
+ * scores survive relaunch even fully offline.
  */
-export const appLeaderboard: LeaderboardPort = createInMemoryLeaderboard();
+export const appLeaderboard: LeaderboardPort =
+  buildFirebasePorts()?.leaderboard ?? createPersistentLocalLeaderboard();
